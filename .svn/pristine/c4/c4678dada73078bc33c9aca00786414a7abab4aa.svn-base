@@ -1,0 +1,88 @@
+package dmpcommon;
+
+import java.net.URI;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
+
+import com.aotain.dw.UserAttMapper;
+import com.aotain.dw.UserAttOrcMapper;
+import com.hadoop.mapreduce.LzoTextInputFormat;
+
+import org.apache.hadoop.hive.ql.io.orc.OrcNewInputFormat;
+
+public class KVDriver extends Configured implements Tool {
+    public int run(String[] args) throws Exception {                  
+		if(args.length!=8)
+			return 1;
+		
+    	Configuration conf = getConf(); 
+		
+		String inputPath = args[0];
+		String targetPath = args[1];
+		String hfconfig = args[2];
+		String kvconfig = args[3];
+		String uaconfig = args[4];
+		String checkconfig = args[5];
+		String phconfig = args[6];
+		String date = args[7];
+		
+		FileSystem fsTarget = FileSystem.get(URI.create(targetPath),conf);
+        Path pathTarget = new Path(targetPath);
+        if(fsTarget.exists(pathTarget))
+        {
+      	  	fsTarget.delete(pathTarget, true);
+        }
+        
+		conf.set("date",date);
+		
+		KVConfig kvConf = new KVConfig(hfconfig,kvconfig,uaconfig,phconfig,checkconfig,conf);
+		kvConf.initConfig();
+		
+        Job job = Job.getInstance(conf);
+        job.setJobName("hdfs mr [" + date + "], TableName:"+ kvConf.TableName);                    
+        job.setJarByClass(getClass());
+        job.setMapOutputKeyClass(Text.class);
+        job.setReducerClass(KVReducer.class);
+        job.setMapOutputValueClass(Text.class);    
+
+        String[] paths = inputPath.split("#");
+        for(int i=0; i<paths.length; i++)
+        {
+        	String[] p = paths[i].split("\\|");
+        	if(p[1].equals("lzo"))
+        	{
+        		MultipleInputs.addInputPath(job,new Path(p[0]),LzoTextInputFormat.class,UserAttMapper.class);
+            	System.out.println("-------------lzopaths: "+p[0]);
+        	}
+        	else if(p[1].equals("orc"))
+        	{
+        		MultipleInputs.addInputPath(job,new Path(p[0]),OrcNewInputFormat.class,UserAttOrcMapper.class);
+            	System.out.println("-------------orcpaths: "+p[0]);
+        	}
+        	else
+        	{
+        		MultipleInputs.addInputPath(job,new Path(p[0]),TextInputFormat.class,UserAttMapper.class);
+            	System.out.println("-------------txtpaths: "+p[0]);
+        	}
+        }
+        
+        FileOutputFormat.setOutputPath(job,new Path(targetPath));         
+
+        return job.waitForCompletion(true)?0:1;                  
+    }
+
+    public static void main(String[] args)throws Exception{
+         int exitcode = ToolRunner.run(new KVDriver(), args);
+         System.exit(exitcode);                  
+    }   
+}

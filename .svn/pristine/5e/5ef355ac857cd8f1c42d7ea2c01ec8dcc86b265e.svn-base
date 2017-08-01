@@ -1,0 +1,146 @@
+package com.aotain.project.gdtelecom.ua;
+
+import java.io.IOException;
+import java.net.URI;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.ql.io.orc.OrcNewInputFormat;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.LazyOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
+
+import com.aotain.project.gdtelecom.ua.test.UAGetParseMapperTest;
+import com.aotain.project.gdtelecom.ua.test.UAPostParseMapperTest;
+import com.aotain.project.gdtelecom.ua.util.Constant;
+
+/**
+ * ua解析入口
+ * 输入：post+get数据
+ * @author Administrator
+ *
+ */
+public class UAParseDriver extends Configured implements Tool {
+    public int run(String[] args) throws Exception {                  
+		if(args.length<5) {
+			usage("Wrong number of arguments: " + args.length);
+			return 1;
+		}
+		
+    	Configuration conf = getConf(); 
+		
+		String inputPath = args[0];
+		String targetPath = args[1];
+		String config = args[2];
+		String check_config = args[3];
+		String date = args[4];
+		
+		//如果输出目录已存在，需要删除
+		FileSystem fsTarget = FileSystem.get(URI.create(targetPath),conf);
+        Path pathTarget = new Path(targetPath);
+        if(fsTarget.exists(pathTarget))
+        {
+      	  	fsTarget.delete(pathTarget, true);
+        }
+        String outSplit = ",";
+        
+        System.out.println("-------------inputPath: " + inputPath);
+        System.out.println("-------------outputPath: " + targetPath);
+		System.out.println("-------------CONFIG_FILE: " + config);
+		System.out.println("-------------CHECK_CONF: " + check_config);
+		System.out.println("-------------OUT_SPLIT: " + outSplit);
+		conf.set("CONFIG_FILE", config);
+		conf.set("CHECK_CONF", check_config);
+		conf.set("OUT_SPLIT", outSplit);
+		conf.set("DATE", date);
+//		conf.setLong("mapred.min.split.size", 128*1024*1024*10);// 块大小为128M, 每个Map大约处理n个块
+		conf.setLong("mapreduce.input.fileinputformat.split.minsize", 128*1024*1024*5);// 块大小为128M, 每个Map大约处理n个块, orc格式默认为16 * 1024 * 1024
+		conf.setLong("mapreduce.input.fileinputformat.split.maxsize", 128*1024*1024*10);// orc格式默认为256 * 1024 * 1024
+		conf.setLong("mapreduce.input.fileinputformat.split.minsize.per.node", 128*1024*1024*5);
+		conf.setLong("mapreduce.input.fileinputformat.split.minsize.per.rack", 128*1024*1024*5);
+		
+		
+		
+        Job job = Job.getInstance(conf);
+        job.setJobName("hdfs mr [UAParseDriver]");                    
+        job.setJarByClass(getClass());
+        job.setReducerClass(UAParseReducer.class);
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(Text.class);                  
+        job.setNumReduceTasks(420);
+        // inputPath格式
+        // get:/user/getinputpath|post:/user/postinputpath
+        String[] paths = inputPath.split("\\|");
+        for(String path : paths) {
+        	String[] p = path.split("-");
+        	String _path = p[1];
+        	if(p[0].trim().equalsIgnoreCase("get") && hdfsPathExists(_path, conf)) {
+        		MultipleInputs.addInputPath(job,new Path(_path),OrcNewInputFormat.class,UAGetParseMapper.class);
+        		System.out.println("-------------get path: "+_path);
+        	} else if (p[0].trim().equalsIgnoreCase("post") && hdfsPathExists(_path, conf)) {
+        		MultipleInputs.addInputPath(job,new Path(_path),OrcNewInputFormat.class,UAPostParseMapper.class);
+        		System.out.println("-------------post path: "+_path);
+        	} else if(p[0].trim().equalsIgnoreCase("gettest") && hdfsPathExists(_path, conf)) {
+        		MultipleInputs.addInputPath(job,new Path(_path),OrcNewInputFormat.class,UAGetParseMapperTest.class);
+        		System.out.println("-------------get path: "+_path);
+        	}else if (p[0].trim().equalsIgnoreCase("posttest") && hdfsPathExists(_path, conf)) {
+        		MultipleInputs.addInputPath(job,new Path(_path),TextInputFormat.class,UAPostParseMapperTest.class);
+        		System.out.println("-------------post path: "+_path);
+        	} 
+        }
+        
+        
+        FileOutputFormat.setOutputPath(job,new Path(targetPath));   
+        LazyOutputFormat.setOutputFormatClass(job, TextOutputFormat.class);//记录输出时才真正创建文件,避免生成空文件
+
+//		job.setOutputKeyClass(Text.class);
+//		job.setOutputValueClass(Text.class);  
+        
+		MultipleOutputs.addNamedOutput(job, Constant.NAME_OUTPUT_UNCHECK, 
+				TextOutputFormat.class,Text.class, Text.class);
+		MultipleOutputs.addNamedOutput(job, Constant.NAME_OUTPUT_CHECKED, 
+				TextOutputFormat.class,Text.class, Text.class);
+        
+        // 多目录输出，测试用
+        MultipleOutputs.addNamedOutput(job, Constant.NAME_OUTPUT_NODEVICE,
+				TextOutputFormat.class, Text.class, Text.class);
+
+		MultipleOutputs.addNamedOutput(job, Constant.NAME_OUTPUT_REGEX, 
+				TextOutputFormat.class,Text.class, Text.class);
+        
+        return job.waitForCompletion(true)?0:1;                  
+    }
+    
+	private boolean hdfsPathExists(String path, Configuration conf){
+		try {
+			Path pathTarget = new Path(path);
+			FileSystem fsTarget = FileSystem.get(URI.create(path),conf);
+			return (fsTarget.exists(pathTarget));
+		} catch (IOException e) {
+			return false;
+		}
+        
+	}
+    
+	private static void usage(final String errorMsg) {
+		if (errorMsg != null && errorMsg.length() > 0) {
+			System.out.println("ERROR: " + errorMsg);
+		}
+		System.out.println("Usage: hadoop jar <jarfile> com.aotain.ods.ua.terminal.UAParseDriver  <in(get-getinputpath|post-postinputpath)> <out> <config_file> <check_config_file> <date>");
+
+	}
+
+    public static void main(String[] args)throws Exception{
+         int exitcode = ToolRunner.run(new UAParseDriver(), args);
+         System.exit(exitcode);                  
+    }   
+}

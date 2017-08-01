@@ -1,0 +1,118 @@
+package com.aotain.common;
+
+import java.util.ArrayList;
+
+import com.aotain.common.HFileConfigMgr.FieldItem;
+
+public class HfileConfig {
+	private String _input;
+	private String _output;
+	private String _tablename;
+	private String _fieldsplit;
+	private String _dtfield;
+	private String _dtformat;
+	private String _kvsplit;
+	private ArrayList<FieldItem> _columns;
+	private ArrayList<FieldItem> _rowkey;
+	private ArrayList<FieldItem> _filter;
+	
+	public String getInput()
+	{
+		return _input;
+	}
+	
+	public void setInput(String input)
+	{
+		_input = input;
+	}
+	
+	public String getOutput()
+	{
+		return _output;
+	}
+	
+	public void setOutput(String output)
+	{
+		_output = output;
+	}
+	
+	public String getTableName()
+	{
+		return _tablename;
+	}
+	
+	public void setTableName(String tablename)
+	{
+		_tablename = tablename;
+	}
+	
+	public void setKVSplit(String kvsplit)
+	{
+		_kvsplit = kvsplit;
+	}
+	
+	public void setDtField(String dtfield)
+	{
+		_dtfield = dtfield;
+	}
+	
+	public void setDtFormat(String dtformat)
+	{
+		_dtformat = dtformat;
+	}
+	
+	public void setFieldSplit(String fieldsplit)
+	{
+		_fieldsplit = fieldsplit;
+	}
+	
+	public String getKVSplit()
+	{
+		return _kvsplit;
+	}
+	
+	public String getFieldSplit()
+	{
+		return _fieldsplit;
+	}
+	
+	public String getDtField()
+	{
+		return _dtfield;
+	}
+	
+	public String getDtFormat()
+	{
+		return _dtformat;
+	}
+	
+	public ArrayList<FieldItem> getColumns()
+	{
+		return _columns;
+	}
+	
+	public void setColumns(ArrayList<FieldItem> columns)
+	{
+		_columns = columns;
+	}
+	
+	public ArrayList<FieldItem> getRowKey()
+	{
+		return _rowkey;
+	}
+	
+	public void setRowKey(ArrayList<FieldItem> rowkey)
+	{
+		_rowkey = rowkey;
+	}
+	
+	public ArrayList<FieldItem> getFilter()
+	{
+		return _filter;
+	}
+	
+	public void setFilter(ArrayList<FieldItem> filter)
+	{
+		_filter = filter;
+	}
+}

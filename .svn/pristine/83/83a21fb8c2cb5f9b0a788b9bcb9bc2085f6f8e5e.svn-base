@@ -1,0 +1,56 @@
+package com.aotain.project.tm.parse.pojo;
+
+/**
+ * 品牌
+ * @author Liangsj
+ *
+ */
+public class Brand {
+	private String ckey;// 关键字，如三星的key有sm
+	private String ekey;
+	private String cname;// 中文名，如三星
+	private String ename;// 英文名，如SAMSUNG
+	
+	public Brand() {
+		super();
+	}
+	public Brand(String ckey, String ekey,String cname, String ename) {
+		super();
+		this.ckey = ckey;
+		this.ekey = ekey;
+		this.cname = cname;
+		this.ename = ename;
+	}
+
+
+	public String getCkey() {
+		return ckey;
+	}
+	public void setCkey(String ckey) {
+		this.ckey = ckey;
+	}
+	public String getEkey() {
+		return ekey;
+	}
+	public void setEkey(String ekey) {
+		this.ekey = ekey;
+	}
+	public String getCname() {
+		return cname;
+	}
+	public void setCname(String cname) {
+		this.cname = cname;
+	}
+	public String getEname() {
+		return ename;
+	}
+	public void setEname(String ename) {
+		this.ename = ename;
+	}
+	@Override
+	public String toString() {
+		return "Brand [ckey=" + ckey + ", ekey=" + ekey + ", cname=" + cname + ", ename=" + ename + "]";
+	}
+	
+	
+}

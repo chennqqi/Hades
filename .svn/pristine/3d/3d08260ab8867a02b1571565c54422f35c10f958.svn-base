@@ -1,0 +1,6 @@
+package com.aotain.project.gdtelecom.identifier.enums;
+
+public enum Type {
+
+	
+}

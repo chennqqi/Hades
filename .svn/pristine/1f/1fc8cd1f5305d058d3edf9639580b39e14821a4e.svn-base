@@ -1,0 +1,271 @@
+package com.aotain.project.tm.parse.deviceinfoparse.conf;
+
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+
+import com.aotain.project.tm.parse.deviceinfoparse.pojo.Brand;
+import com.aotain.project.tm.parse.utils.StringUtil;
+
+/**
+ * 品牌配置
+ * 加载品牌数据到缓存
+ * 并对一些字符串进行一些替换品牌，去品牌等操作
+ * @author Liangsj
+ *
+ */
+public class BrandConf {
+
+	private List<Brand> brands = new ArrayList<Brand>();
+	
+	{
+		// TODO 测试数据
+		/*brands.add(new Brand("","SM","三星","SAMSUNG"));
+		brands.add(new Brand("盖乐世","GALAXY","三星","SAMSUNG"));
+		brands.add(new Brand("","HUAWEI","华为","HUAWEI"));
+		brands.add(new Brand("","ACER","宏碁","ACER"));
+		brands.add(new Brand("","","VIVO","VIVO"));*/
+	}
+	
+	/**
+	 * 从本地加载配置
+	 * @param confFile 本地文件路径
+	 */
+	public void load(String confFile) {
+		InputStream in = null;
+		try {
+			in = new FileInputStream(confFile);
+			load(in);
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+			throw new RuntimeException("加载配置异常", e);
+		} finally{
+			if(null != in) {
+				try {
+					in.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
+	/**
+	 * 加载配置
+	 * @param in
+	 */
+	public void load(InputStream in) {
+		BufferedReader br = null;
+		try {
+			br = new BufferedReader(new InputStreamReader(in, "utf-8"));
+			String line = null;
+			while((line=br.readLine())!=null) {
+				line= line.trim();
+				String[] arr = line.split(",", 4);
+				if(arr.length < 4){
+					System.out.println("error:"+line);
+					continue;
+				}
+				brands.add(new Brand(arr[0].trim().toUpperCase(),arr[1].trim().toUpperCase(),arr[2].trim().toUpperCase(),arr[3].trim().toUpperCase()));
+			}
+			System.out.println("加载终端品牌配置完成：size=" + brands.size());
+		} catch (IOException e) {
+			e.printStackTrace();
+			throw new RuntimeException(e);
+		} finally {
+			try {
+				if(br !=null) {
+					br.close();
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	/**
+	 * 从HDFS加载配置
+	 * @param hdfsFile hdfs文件路径
+	 * @param conf
+	 */
+	public void load(String hdfsFile, Configuration conf) {
+		InputStream in = null;
+		try {
+			System.out.println("加载品牌配置路径:hdfs_path=" + hdfsFile);
+			FileSystem fs = FileSystem.get(conf);
+			Path  path = new Path(hdfsFile);
+			if(fs.exists(path)) {
+				for(FileStatus  filestatus : fs.listStatus(path)) {
+					System.out.println("加载品牌数据:file=" + filestatus.getPath());
+					in = fs.open(filestatus.getPath());
+					load(in);
+					close(in, null);
+				}
+			}
+			System.out.println("品牌数据加载完成,size:" + brands.size());
+			if(brands.size() == 0) {
+				throw new RuntimeException("品牌数据为空，请检查,hdfs_path="+ hdfsFile);
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+			throw new RuntimeException("加载配置异常", e);
+		}finally{
+			if(null != in) {
+				try {
+					in.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
+	public void close(InputStream in, Reader reader) {
+		try {
+			if(in != null) {
+				in.close();
+			}
+			if(reader != null) {
+				reader.close();
+			}
+			} catch (IOException e) {
+		}
+	}
+	
+	/**
+	 * 如果字符串中包含品牌中文名，替换为英文
+	 * @return
+	 */
+	public String replaceCname2Ename(String str, String cname){
+		return replace(str, Brand.CNAME, Brand.ENAME, cname);
+	}
+	
+	/**
+	 * 如果字符串中包含中文key，替换为英文key
+	 * @param flag true时替换ename,false时替换为key
+	 * @return
+	 */
+	public String replaceCkey2EKey(String str, String cname){
+		if(StringUtil.isNull(cname)){
+			return str;
+		}
+		return replace(str, Brand.CKEY, Brand.EKEY, cname);
+	}
+	
+	public String replaceEkey2EName(String str, String cname){
+		if(StringUtil.isNull(cname)){
+			return str;
+		}
+		return replace(str, Brand.EKEY, Brand.ENAME, cname);
+	}
+	
+	/**
+	 * 遍历brands，替换str中A值为B值
+	 * A值为brand的第brandIdx1个属性
+	 * B值为brand的第brandIdx2个属性
+	 * @param str
+	 * @param brandIdx1 : Brand.CKEY Brand.EKEY Brand.ENAME Brand.CNAME
+	 * @param brandIdx2 : Brand.CKEY Brand.EKEY Brand.ENAME Brand.CNAME
+	 * @param cname 若cname不为空，表示该替换只替换品牌名为cname的数据
+	 * @return
+	 */
+	private String replace(String str, int brandIdx1, int brandIdx2, String cname){
+		if(StringUtil.isNull(str)){
+			return str;
+		}
+		for(Brand b : brands){
+			if(cname != null && !b.getCname().equals(cname)){
+				continue;
+			}
+			if(!StringUtil.isNull(b.valueOf(brandIdx2)) && StringUtil.contains(str, b.valueOf(brandIdx1))){
+				return str.replaceFirst(b.valueOf(brandIdx1),b.valueOf(brandIdx2));
+			}
+		}
+		return str;
+	}
+	
+	/**
+	 * 遍历brands，删除str中A值
+	 * A值为brand的第brandIdx个属性
+	 * @param str
+	 * @param brandIdx : Brand.CKEY Brand.EKEY Brand.ENAME Brand.CNAME
+	 * @param cname 若cname不为空，表示该替换只删除品牌名为cname的数据
+	 * @return
+	 */
+	private String remove(String str, int brandIdx, String cname){
+		if(StringUtil.isNull(str)){
+			return str;
+		}
+		for(Brand b : brands){
+			if(cname != null && !b.getCname().equals(cname)){
+				continue;
+			}
+			if(StringUtil.contains(str, b.valueOf(brandIdx))){
+				return str.replace(b.valueOf(brandIdx),"");
+			}
+		}
+		return str;
+	}
+	
+	/**
+	 * 去除字符串中的品牌，包括中文和英文
+	 * @param str
+	 * @return
+	 */
+	public String rmBrand(String str, String cname){
+		return remove(remove(str, Brand.CNAME, null), Brand.ENAME, cname);
+	}
+	
+	/**
+	 * 去除品牌关键字，前提是要根据品牌中文名
+	 * @param str
+	 * @param brand
+	 * @return
+	 */
+	public String rmKey(String str, String cname){
+		if(StringUtil.isNull(cname)){
+			return str;
+		}
+		return remove(remove(str, Brand.CKEY, cname), Brand.EKEY, cname);
+	}
+	
+	/**
+	 * 从配置数据中第findIdx个字段，值为findValue的Brand
+	 * @return
+	 */
+	public Brand getFromAtt(int findIdx, String findValue){
+		if(StringUtil.isNull(findValue)){
+			return null;
+		}
+		for(Brand b : brands){
+			if(b.valueOf(findIdx).equals(findValue)){
+				return b;
+			}
+		}
+		return null;
+	}
+	
+	public void printAll(){
+		for(Brand b : brands){
+			System.out.println(b);
+		}
+	}
+	
+	public static void main(String[] args) {
+		BrandConf conf = new BrandConf();
+		conf.load("config/brand_ch.csv");
+		String str = "七彩虹 ab";
+		System.out.println(conf.replaceCkey2EKey(str, "七彩虹"));
+		System.out.println(conf.getFromAtt(Brand.CNAME, "东芝"));
+	}
+}

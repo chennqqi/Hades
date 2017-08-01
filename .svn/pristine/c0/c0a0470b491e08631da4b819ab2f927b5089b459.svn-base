@@ -1,0 +1,314 @@
+package dmpcommon;
+
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Serializable;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IOUtils;
+
+import com.aotain.common.HFileConfigMgr;
+import com.aotain.common.HfileConfig;
+import com.aotain.common.ObjectSerializer;
+import com.aotain.common.HFileConfigMgr.FieldItem;
+
+import dmpcommon.config.KvItem;
+import dmpcommon.config.UAConfig;
+
+public class KVConfig implements Serializable{
+	private static final long serialVersionUID = 1L;
+	private Configuration conf;
+	private String hfile;
+	private String kvfile;
+	private String phfile;
+	private String nophone;
+	private Map<String,Integer> mapField = new HashMap<String,Integer>();
+	private Map<String,String> mapPhone = new HashMap<String,String>();
+	private Map<String,ArrayList<KvItem>> mapHost = new HashMap<String,ArrayList<KvItem>>();
+	
+	private String uaConfFile;
+	private String checkConfFile;
+	
+	public String TableName;
+
+	public KVConfig(){}
+	
+	public KVConfig(String _hfile, String _kvfile, String _uaConf, String _checkConf, String _phfile, Configuration _conf) 
+			throws Exception
+	{
+		this.hfile=_hfile;
+		this.kvfile=_kvfile;
+		this.conf=_conf;
+		this.uaConfFile = _uaConf;
+		this.phfile = _phfile;
+		this.checkConfFile = _checkConf;
+	}
+	
+	public void initConfig() throws Exception
+	{
+		this.initHfile();
+		this.localKvFile();
+		for(Map.Entry<String, ArrayList<KvItem>> kv: mapHost.entrySet()){
+			System.out.println(kv.getKey() + " -> " + kv.getValue());
+		}
+		System.out.println();
+		conf.set("KvField",ObjectSerializer.serialize((Serializable) mapField));
+		conf.set("KvMap",ObjectSerializer.serialize((Serializable) mapHost));
+		
+		this.initPhFile();
+		conf.set("PhMap",ObjectSerializer.serialize((Serializable) mapPhone));
+		
+		UAConfig uaConfig = new UAConfig();
+		uaConfig.loadConf(uaConfFile);
+		uaConfig.loadCheck(checkConfFile);
+		conf.set("UAConfMap",ObjectSerializer.serialize((Serializable)uaConfig.getDevices()));
+		conf.set("UAConfFilter",ObjectSerializer.serialize((Serializable)uaConfig.getFilter()));
+		conf.set("CheckMap",ObjectSerializer.serialize((Serializable)uaConfig.getDeviceMappings()));
+	}
+	
+	private void initHfile()//數據結構初始化
+			throws Exception
+	{
+		HFileConfigMgr configMgr = new HFileConfigMgr(hfile);
+		HfileConfig confHfile = configMgr.config;
+		
+		TableName = confHfile.getTableName();
+		System.out.println("-------------tablename: " + TableName);
+		
+		String fieldsplit = confHfile.getFieldSplit();
+		conf.set("fieldsplit",fieldsplit);
+		System.out.println("-------------fieldsplit: " + fieldsplit);
+		
+		String dtfield = confHfile.getDtField();
+		conf.set("dtfield",dtfield);
+		System.out.println("-------------dtfield: " + dtfield);
+		
+		String dtformat = confHfile.getDtFormat();
+		conf.set("dtformat",dtformat);
+		System.out.println("-------------dtformat: " + dtformat);
+
+		String inputSchema="struct<";
+		for (FieldItem item : confHfile.getColumns()) {
+			mapField.put(item.FieldName, item.FieldIndex);
+			inputSchema+=item.FieldName+":"+item.ColType+",";
+		}
+		inputSchema = inputSchema.substring(0, inputSchema.length()-1)+">";
+		conf.set("inputSchema", inputSchema);
+		System.out.println("-------------inputSchema: " + inputSchema);
+	}
+	
+	private void initKvFile()//kv提取初始化
+			throws Exception
+	{
+		InputStream in = null;
+		try {
+			FileSystem fs = FileSystem.get(URI.create(this.kvfile), this.conf);
+			Path path = new Path(this.kvfile);
+			if(fs.exists(path))
+			{
+				in = fs.open(new Path(this.kvfile));
+				load(in);
+			}
+			else
+			{
+				System.out.println("not exist kvfile !");
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+			throw new RuntimeException("加载配置异常", e);
+		}finally{
+			if(null != in) {
+				try {
+					in.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
+	private void initPhFile()//手机号段表匹配
+			throws Exception
+	{
+		InputStream in = null;
+		String line = "";
+		BufferedReader br;
+		String[] arr;
+		try {
+				FileSystem fs = FileSystem.get(URI.create(this.phfile), this.conf);
+				Path path = new Path(this.phfile);
+				if(fs.exists(path))
+				{
+					in = fs.open(new Path(this.phfile));
+					br = new BufferedReader(new InputStreamReader(in, "UTF8"));
+					while ((line = br.readLine()) != null) 
+					{
+						arr = line.split("\\|", -1);
+						mapPhone.put(arr[1], arr[1]);
+					}
+				}
+				else
+				{
+					System.out.println("not exist phfile !");
+				}
+				
+		} catch (IOException e) {
+			e.printStackTrace();
+			throw new RuntimeException("加载配置异常", e);
+		}finally{
+			if(null != in) {
+				try {
+					in.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
+	private void localKvFile() throws Exception
+	{
+		InputStream in = null;
+		try {
+			in = new FileInputStream(this.kvfile);
+			load(in);
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+			throw new RuntimeException("加载配置异常", e);
+		} finally{
+			if(null != in) {
+				try {
+					in.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
+	private void load(InputStream in) throws Exception {
+		BufferedReader br = null;
+		try {
+			br = new BufferedReader(new InputStreamReader(in));
+			String line = null;
+			String host="";
+			String[] items;
+			String[] cells;
+			String[] units;
+			ArrayList<KvItem> kvList;
+			
+			while((line=br.readLine())!=null) {
+				items = line.split("\\$", -1);
+				if(items.length!=5)
+					continue;
+				KvItem kv = new KvItem();
+				kv.ID=items[0];
+				kv.Code=items[3];
+				kv.Weight=Integer.parseInt(items[4]);
+				cells=items[2].split(";;",-1);
+				if(cells.length==2)
+				{
+					for(int i=0;i<cells.length;i++)
+					{
+						units=cells[i].split("==",-1);
+						if(units.length == 2)
+						{
+							if(units[0].equals("Index"))
+							{
+								kv.GetIndex=Integer.parseInt(units[1]);
+							}
+							else
+							{
+								if(mapField.get(units[0])!=null)
+								{
+									kv.GetField=mapField.get(units[0]);
+									kv.GetRegx=units[1];
+								}
+							}
+						}
+					}
+				}
+				else
+				{
+					kv.GetRegx=cells[0];
+				}
+								
+				cells = items[1].split(";;",-1);
+				if(items[1].length() == 0)
+				{
+					host = "null";
+				}
+				else
+				{
+					for(int i = 0; i < cells.length; i++)
+					{
+						units = cells[i].split("==",-1);
+						if(units.length == 2)
+						{
+							if(units[0].equals("HOST"))
+							{
+								host = units[1];
+							}
+							else
+							{
+								if(mapField.get(units[0])!=null)
+								{
+									kv.CondMap.put(mapField.get(units[0]), units[1]);
+								}
+							}
+						}
+					}
+				}
+				
+				if(mapHost.get(host)==null)
+				{
+					kvList = new ArrayList<KvItem>();
+					kvList.add(kv);
+					mapHost.put(host,kvList);
+				}
+				else
+				{
+					kvList = mapHost.get(host);
+					kvList.add(kv);
+					mapHost.put(host,kvList);
+				}
+				System.out.println(line);
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+			throw new RuntimeException(e);
+		} finally {
+			try {
+				if(br !=null) {
+					br.close();
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	public static void main(String[] args) throws Exception {
+		String hfconfig = "conf/to_opr_http.cfg";
+		String kvconfig = "conf/kv.csv";
+		String uaconfig = "conf/ua_device.conf";
+		String checkconfig = "conf/dim_devicecheck_20170321";
+		String phconfig = "conf/dim_phone";
+		Configuration conf = new Configuration(); 
+		KVConfig kvConf = new KVConfig(hfconfig,kvconfig,uaconfig, checkconfig,phconfig,conf);
+		kvConf.initConfig();
+	}
+
+}

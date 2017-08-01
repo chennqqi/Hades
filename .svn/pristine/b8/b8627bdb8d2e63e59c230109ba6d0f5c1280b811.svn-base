@@ -1,0 +1,184 @@
+package com.aotain.project.gdtelecom.identifier.test;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class Test {
+
+	private static StringBuffer bs = new StringBuffer();
+	private static final String REGEX_PHONE = "(\\w+=|\\w+:)([1][0-9]{10})[;&,}\\s*]{1}";
+	private static final String REGEX_PHONE_C = "(=|:)([1][0-9]{10})[;&,}\\s*]{1}";
+	public static void main(String[] args) throws UnsupportedEncodingException {
+		String cookie =  "sdf=13146598746&f=13146598746;X19SZXF1ZXN0VmVyaWZpY2F0aW9uVG9rZW49cTBkWkxkREZGbHJhMU5SaXVIajJxV1NCY3FzeFRtbFgyLU4tak1lVzBYS3lNM0c1MnVxLXZQWElXaHZUN1pVYkM0UXMyT2x3V3VHbVZCWThkaTdzZE1mZ3FaTWpOTDUwWktDcDFQZDF4TWcxJlBsYWNlPSVFOCVBNSVCRiVFOCU5NyU4Ri0lRTUlQjElQjElRTUlOEQlOTclRTUlOUMlQjAlRTUlOEMlQkEmQ29uZGl0aW9uPSVFNCVCOSU4MyVFNCVCOCU5QyVFNSU4RSVCRiVFNiVCMyVCRCVFNSVCRCU5MyVFOSU5NSU4NyZDYXRlZ29yeT0lRTclQkQlOTElRTclODIlQjklRTUlOTAlOEQlRTclQTclQjAmdGVtcGxhdGVfbWFwdGlwPSsrKysrKysrKysrKysrKysrKysrJTNDZGl2K2NsYXNzJTNEJTIybmV3cWlwYW9idCUyMitpZCUzRCUyMm1hcHRpcF9iYXIlMjIrb25tb3VzZWRvd24lM0QlMjJkcmFnJTI4dGhpcy5wYXJlbnROb2RlJTJDK2V2ZW50JTJDKyUyN01hcEhvbGRlciUyNyUyOSUzQiUyMitzdHlsZSUzRCUyMmN1cnNvciUzQW1vdmUlM0IlMjIlM0UlMEQlMEErKysrKysrKysrKysrKysrKysrKysrJTNDZGl2K2NsYXNzJTNEJTIybmV3cWlwYW9idGwlMjIlM0UlM0NzcGFuJTNFJTdCU0lURU5BTUUlN0QtJUU0JUI4JUFEJUU5JTgwJTlBJUU3JUJEJTkxJUU3JTgyJUI5JTNDJTJGc3BhbiUzRSUzQyUyRmRpdiUzRSUwRCUwQSsrKysrKysrKysrKysrKysrKysrKyslM0NkaXYrY2xhc3MlM0QlMjJuZXdxaXBhb2J0ciUyMiUzRSUzQ2EraHJlZiUzRCUyMmphdmFzY3JpcHQlM0F2b2lkJTI4MCUyOSUyMitvbkNsaWNrJTNEJTIyY2xvc2VJbmZvV2luZG93JTI4JTI5JTNCJTIyK3N0eWxlJTNEJTIyY3Vyc29yJTNBcG9pbnRlciUzQiUyMiUzRSUzQ2ltZythbHQlM0QlMjIlRTUlODUlQjMlRTklOTclQUQlMjIrc3JjJTNEJTIyJTJGaW1hZ2VzJTJGY2xvc2UuZ2lmJTIyJTNFJTNDJTJGYSUzRSUzQyUyRmRpdiUzRSUwRCUwQSsrKysrKysrKysrKysrKysrKysrKyslM0NkaXYrY2xhc3MlM0QlMjJjbGVhciUyMiUzRSUzQyUyRmRpdiUzRSUwRCUwQSsrKysrKysrKysrKw==";
+		long start = System.currentTimeMillis();
+		int i=0;
+		while(i++<100){
+			findByRegexs(cookie, REGEX_PHONE, 2);
+		}
+		findByRegexs(cookie, REGEX_PHONE, 2);
+		System.out.println(System.currentTimeMillis() - start);
+		System.out.println(findPhCount(cookie, REGEX_PHONE_C, 2));
+	}
+	
+	public static void decodefile(String filein, String fileout) throws Exception {
+		BufferedReader br = new BufferedReader(new FileReader(filein));
+		PrintWriter pw = new PrintWriter(fileout);
+		String line = null;
+		String out = null;
+		while((line = br.readLine()) !=null) {
+			out =decodepost(line);
+			out = out.replaceAll("\\s", " ");
+			pw.println(out);
+			/*if(out.contains("<div")){
+				System.out.println(line);
+				break;
+			}*/
+		}
+		pw.flush();
+		pw.close();
+		br.close();
+	} 
+	
+	protected static String decode(String str) {
+		byte[] bt = null;
+		try {
+			sun.misc.BASE64Decoder decoder = new sun.misc.BASE64Decoder();
+			bt = decoder.decodeBuffer(str);
+		} catch (IOException e) {
+		}
+		return new String(bt);
+	}
+	
+	public static String decodepost(String str) throws UnsupportedEncodingException {
+		str  = decode(str);
+		if(str.contains("%")) {
+			str = str.replaceAll("%(?![0-9a-fA-F]{2})", "%25");
+			str = java.net.URLDecoder.decode(str, "utf-8");
+		}
+		return str;
+	}
+
+	public static void formate() {
+		String s = String.format("%s,%s,%s,%s,%s,", "a", "a", "a", "a", "a");
+	}
+
+	public static void sb() {
+		StringBuffer sb = new StringBuffer();
+		sb.append("a").append("a").append("a").append("a").append("a").append("a").append("a").append("a").append("a")
+				.append("a");
+		String s = sb.toString();
+	}
+
+	public String parseTelTypeFromName(String name) {
+		// Moto RAZR V锋芒（MT887/移动版）
+		String regex1 = "（([-a-zA-Z\\d\\s\\+]*)\\/";// 取（到/部分
+		String regex2 = "([-a-zA-Z\\d\\s\\+]+)[（]";
+		String regex3 = "([-a-zA-Z\\d\\s\\+]+)";
+		String result = find(name, regex1);
+		if (!isModel(result)) {
+			result = find(name, regex2);
+		}
+		if (!isModel(result)) {
+			result = find(name, regex3);
+		}
+		if (!isModel(result)) {
+			result = "";
+		}
+		return result.toUpperCase();
+
+	}
+	
+	private static void contains(String str){
+		str.contains("iPhone");
+	}
+	
+	private static void match(String str) {
+		Matcher pat = Pattern.compile("(iphone.*?)([^\\s\\.a-zA-Z0-9]|\\t|OS|$)", Pattern.CASE_INSENSITIVE).matcher(str);
+		pat.find();
+		
+	}
+
+	private boolean isModel(String model) {
+		return model != null && !model.contains("GB") && !model.contains("4G") && !model.contains("3G")
+				&& !model.contains("2G");
+	}
+
+	private String find(String str, String regex) {
+		Pattern pat = Pattern.compile(regex);
+		Matcher mat = pat.matcher(str);
+		if (mat.find()) {
+			return mat.group(1);
+		}
+		return null;
+	}
+
+	public static void bs() {
+		bs.append("a").append("a").append("a").append("a").append("a").append("a").append("a").append("a").append("a")
+				.append("a");
+		String s = bs.toString();
+		bs.delete(0, bs.length() - 1);
+	}
+	
+	
+	protected static List<String> findByRegexs(String str, String regEx, int group) {
+		
+		if ((str == null) || (regEx == null) || ((regEx != null) && ("".equals(regEx.trim()))))
+			return null;
+
+		Pattern p = Pattern.compile(regEx);
+		Matcher m = p.matcher(str);
+		ArrayList<String> results = new ArrayList<String>();
+		/*while (m.find()) {
+			results.add(m.group(group));
+		}*/
+		
+		String result = "";
+		Set<String> phoneset = new HashSet<String>(); 
+		while (m.find()) {
+			phoneset.add( m.group(2));
+			result = result + m.group(1) + m.group(2) + ";";
+		}
+		if(phoneset.size()>=2) {
+			System.out.println(result);
+		}
+		return results;
+	}
+	
+	protected static String findByRegex(String str, String regEx, int group) {
+		String resultValue = null;
+		if ((str == null) || (regEx == null) || ((regEx != null) && ("".equals(regEx.trim()))))
+			return resultValue;
+
+		Pattern p = Pattern.compile(regEx);
+		Matcher m = p.matcher(str);
+
+		boolean result = m.find();
+		if (result) {
+			resultValue = m.group(group);
+		}
+		return resultValue;
+	}
+	
+	protected static int findPhCount(String str, String regEx, int group) {
+		int resultValue = 0;
+		if ((str == null) || (regEx == null) || ((regEx != null) && ("".equals(regEx.trim()))))
+			return 0;
+
+		Pattern p = Pattern.compile(regEx);
+		Matcher m = p.matcher(str);
+
+		while ( m.find()) {
+			resultValue++;
+		}
+		return resultValue;
+	}
+}

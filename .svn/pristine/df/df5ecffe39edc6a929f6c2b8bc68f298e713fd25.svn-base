@@ -1,0 +1,163 @@
+package com.aotain.project.gdtelecom.identifier;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Serializable;
+import java.net.URI;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.ql.io.orc.OrcNewInputFormat;
+import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
+
+import com.aotain.common.ObjectSerializer;
+import com.aotain.project.gdtelecom.identifier.sz.IdentifierGMapper_ORC;
+import com.aotain.project.gdtelecom.identifier.sz.IdentifierPMapper_Text;
+
+/**
+ * 现场环境-用户标识解析
+ * 输入：post+get数据
+ * @author Administrator
+ *
+ */
+public class IdentifierDriver extends Configured implements Tool{
+
+	@Override
+	public int run(String[] args) throws Exception {
+		// TODO Auto-generated method stub
+		if(args.length!=8)
+		{
+			System.out.print("args error!" + args.length);
+			return -1;
+		}
+		
+    	Configuration conf = getConf(); 
+		
+		String[] inputPaths = args[0].split("#");
+		String phonePath = args[1];
+		String notnk = args[2];
+		String uaPath = args[3];
+		String checkPath = args[4];
+		String appPath = args[5];
+		String targetPath = args[6];
+		String date = args[7];
+			
+		Map<String,String> map=new HashMap<String,String>();
+		 FileSystem fsPhone = FileSystem.get(URI.create(phonePath),conf); 
+		FSDataInputStream in = null;
+		try {
+			Path path = new Path(phonePath);
+			if (fsPhone.exists(path)) {
+				for (FileStatus file : fsPhone.listStatus(path)) {
+					in = fsPhone.open(file.getPath());
+					BufferedReader bis = new BufferedReader(
+							new InputStreamReader(in, "UTF8"));
+					String line = "";
+					while ((line = bis.readLine()) != null) {
+						String[] arr = line.split("\\|", -1);
+						map.put(arr[1], arr[1]);
+					}
+				}
+			} else {
+				System.out.println("not exist file !");
+			}
+		} finally {
+			if (in != null)
+				IOUtils.closeStream(in);
+		}
+		
+		conf.set("map", ObjectSerializer.serialize((Serializable) map));
+		conf.set("notnk", notnk);
+		conf.setBoolean("mapreduce.input.fileinputformat.input.dir.recursive",true);
+	
+		FileSystem fsTarget = FileSystem.get(URI.create(targetPath),conf);
+        Path pathTarget = new Path(targetPath);
+        if(fsTarget.exists(pathTarget))
+        {
+      	  	fsTarget.delete(pathTarget, true);
+        }
+//        CONF_FILE=/user/hive/warehouse/aotain_dm_terminal.db/config/ua_device.conf
+//        		CHECK_CONF_FILE=/user/hive/warehouse/aotain_dm_terminal.db/dim_devicecheck
+        conf.set("CONFIG_FILE", uaPath);
+        conf.set("CHECK_CONF", checkPath);
+        conf.set("APP_CONF", appPath);
+        conf.set("date",date);
+        Job job = Job.getInstance(conf);
+        job.setJobName("Identifier File[" + date + "]");                    
+        job.setJarByClass(getClass());
+
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(Text.class);
+        job.setReducerClass(IdentifierReducer.class);
+        job.setOutputKeyClass(Text.class);
+	    job.setOutputValueClass(Text.class); 
+//	    job.setNumReduceTasks(420);改用命令参数配置
+	    
+	    boolean exists = false;
+	    for(int i=0; i< inputPaths.length; i++)
+        {
+        	String[] p = inputPaths[i].split("\\|");
+        	String path = p[0];
+			if (p[1].equalsIgnoreCase("get") && hdfsPathExists(path, conf)) {
+				MultipleInputs.addInputPath(job, new Path(path), OrcNewInputFormat.class, IdentifierGMapper.class);
+				System.out.println("-------------getpath: " + p[0]);
+				exists = true;
+			} else if (p[1].equalsIgnoreCase("post") && hdfsPathExists(path, conf)) {
+				MultipleInputs.addInputPath(job, new Path(path), OrcNewInputFormat.class, IdentifierPMapper.class);
+				System.out.println("-------------postpath: " + p[0]);
+				exists = true;
+			} else if (p[1].equalsIgnoreCase("gettest") && hdfsPathExists(path, conf)) {
+				MultipleInputs.addInputPath(job, new Path(path), OrcNewInputFormat.class, IdentifierGMapper_ORC.class);
+				System.out.println("-------------get-test: " + p[0]);
+				exists = true;
+			} else if (p[1].equalsIgnoreCase("posttest") && hdfsPathExists(path, conf)) {
+				MultipleInputs.addInputPath(job, new Path(path), TextInputFormat.class, IdentifierPMapper_Text.class);
+				System.out.println("-------------post-test: " + p[0]);
+				exists = true;
+			} else if (p[1].equalsIgnoreCase("postyanfa") && hdfsPathExists(path, conf)) {
+				MultipleInputs.addInputPath(job, new Path(path), TextInputFormat.class, IdentifierPMapper_yanfa.class);
+				System.out.println("-------------post-yanfa: " + p[0]);
+				exists = true;
+			}
+        }
+		if (!exists) {
+			System.out.println("输入路径没有，程序退出：" + args[0]);
+			return 1;
+		}
+	    
+
+        FileOutputFormat.setOutputPath(job,new Path(targetPath));         
+
+        return job.waitForCompletion(true)?0:1;  
+	}
+	
+	private boolean hdfsPathExists(String path, Configuration conf){
+		try {
+			Path pathTarget = new Path(path);
+			FileSystem fsTarget = FileSystem.get(URI.create(path),conf);
+			return (fsTarget.exists(pathTarget));
+		} catch (IOException e) {
+			return false;
+		}
+        
+	}
+	
+	public static void main(String[] args)throws Exception{
+        int exitcode = ToolRunner.run(new IdentifierDriver(), args);
+        System.exit(exitcode);                  
+   }   
+}

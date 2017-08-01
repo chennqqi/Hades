@@ -1,0 +1,271 @@
+package com.aotain.project.gdtelecom.conf;
+
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.TreeMap;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+
+import com.aotain.project.gdtelecom.ua.pojo.DeviceProperties;
+import com.aotain.project.gdtelecom.ua.pojo.DeviceRegex;
+import com.aotain.project.gdtelecom.ua.pojo.Pair;
+import com.aotain.project.gdtelecom.ua.pojo.PropNameEnum;
+
+public class ConfManager {
+
+	/** 终端解析配置数据*/
+	private List<DeviceRegex> devices = new ArrayList<DeviceRegex>();
+	
+	/** 要过滤的ua*/
+	private Set<String> filter = new HashSet<String>();
+	
+	/** 终端解析黑名单*/
+	private Map<String, List<String>> blocklist = new HashMap<String, List<String>>();
+	
+	/** 手机号key配置数据*/
+	private List<Pair<String,String>> phonekeys = new ArrayList<Pair<String,String>>();
+	
+	/** iphone手机配置数据，key=ua关键字，value=终端名称*/
+	private Map<String, String> iphoneMap = new TreeMap<String,String>(new Comparator<String>() {
+		@Override
+		public int compare(String o1, String o2) {
+			return o1.length() > o2.length() ? -1 : 1;
+		}
+	});;
+	
+	/**
+	 * 从本地加载配置
+	 * @param confFile 本地文件路径
+	 */
+	public void load(String confFile) {
+		InputStream in = null;
+		try {
+			in = new FileInputStream(confFile);
+			load(in);
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+			throw new RuntimeException("加载配置异常", e);
+		} finally{
+			if(null != in) {
+				try {
+					in.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
+	/**
+	 * 从HDFS加载配置
+	 * @param hdfsFile hdfs文件路径
+	 * @param conf
+	 */
+	public void load(String hdfsFile, Configuration conf) {
+		InputStream in = null;
+		try {
+			FileSystem fs = FileSystem.get(URI.create(hdfsFile), conf);
+			in = fs.open(new Path(hdfsFile));
+			load(in);
+		} catch (IOException e) {
+			e.printStackTrace();
+			throw new RuntimeException("加载配置异常", e);
+		}finally{
+			if(null != in) {
+				try {
+					in.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
+	/**
+	 * 加载配置
+	 * @param in
+	 */
+	public void load(InputStream in) {
+		BufferedReader br = null;
+		try {
+			br = new BufferedReader(new InputStreamReader(in, "utf-8"));
+			String line = null;
+			while((line=br.readLine())!=null) {
+				line= line.trim();
+				if(line.startsWith("#")) {
+					continue;
+				}
+				if(line.contains("#")) {
+					line = line.substring(0, line.indexOf("#"));
+				}
+				if(line.startsWith("filter:")) {
+					filter.add(line.substring("filter:".length()).toUpperCase());
+					continue;
+				}
+				if(line.startsWith("phonekey:")) {
+					String[] phonekey = line.substring("phonekey:".length()).split("=");
+					phonekeys.add(new Pair<String,String>(phonekey[0].trim(),phonekey[1].trim().toUpperCase()));
+					continue;
+				}
+				if(line.startsWith("blocklist:")){
+					String[] block = line.substring("blocklist:".length()).trim().split("\\|");
+					String domain = block[0].trim();
+					String uakey = block[1].trim().toUpperCase();
+					if(blocklist.containsKey(domain)){
+						blocklist.get(domain).add(uakey);
+					} else {
+						List<String> keys = new ArrayList<String>();
+						keys.add(uakey);
+						blocklist.put(domain,keys);
+					}
+					continue;
+				}
+				if(line.startsWith("iphone:")) {
+					String[] phonekey = line.substring("iphone:".length()).split("=");
+					iphoneMap.put(phonekey[0].trim(),phonekey[1].trim());
+					continue;
+				}
+				
+				String[] arr = line.split("@@");
+				if(arr.length<2){
+					continue;
+				}
+				DeviceRegex t = new DeviceRegex();
+				t.setRegex(arr[0].trim());
+				String[] pros = arr[1].split("\\|");
+				for(int i=0, len=pros.length; i<len; i++) {
+					String pro  = pros[i].trim().toUpperCase();
+					
+					DeviceProperties deviceProperties= new DeviceProperties();
+					if(pro.contains("=")){
+						deviceProperties.setKey(PropNameEnum.nameOf(pro.split("=")[0]));
+						deviceProperties.setValue(pro.split("=")[1]);
+					} else {
+						deviceProperties.setKey(PropNameEnum.nameOf(pro));
+					}
+					t.addProp(deviceProperties);
+				}
+				devices.add(t);
+			}
+			System.out.println("正则表达式配置加载完成，size：" + devices.size());
+			System.out.println("黑名单配置加载完成：");
+			for(Entry<String, List<String>> entry : blocklist.entrySet()){
+				System.out.println(entry.getKey() + ":" + entry.getValue());
+			}
+			System.out.println("手机号key配置加载完成：size："+phonekeys.size());
+			System.out.println("iphone配置加载完成：");
+			for(Entry<String, String> entry : iphoneMap.entrySet()){
+				System.out.println(entry.getKey() + ":" + entry.getValue());
+			}
+			
+		} catch (IOException e) {
+			e.printStackTrace();
+			throw new RuntimeException(e);
+		} finally {
+			try {
+				if(br !=null) {
+					br.close();
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	/*public boolean containDomin(String domain){
+		return blocklist.keySet().contains(domain);
+	}
+	*/
+	public boolean containBlock(String domain, String ua){
+		boolean result = containOneBlock(domain, ua);
+		if(!result){
+			result = containOneBlock("*", ua);
+		}
+		return result;
+	}
+	
+	/**
+	 * 是否手机号码的参数关键字
+	 * 如url中得到 mobile=12345678945,用于判断mobile是否在配置的phonekeys中有包含
+	 * @param phonekey 
+	 * @return 匹配到phonekey，则返回phonekey对应的attcode,否则返回null
+	 */
+	public String checkPhoneKey(String phonekey){
+		if(phonekey == null){
+			return null;
+		}
+		phonekey = phonekey.toUpperCase();
+		for(Pair<String, String> p : phonekeys){
+			if(phonekey.contains(p.getValue())){
+				return p.getKey();
+			}
+		}
+		return null;
+	}
+	
+	private boolean containOneBlock(String domain, String ua){
+		List<String> keys = blocklist.get(domain);
+		if(keys == null || keys.size() == 0){
+			return false;
+		}
+		for(String key : keys) {
+			if(ua.toUpperCase().contains(key)){
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	public Map<String, List<String>> getBlocklist() {
+		return blocklist;
+	}
+
+	public List<DeviceRegex> getDevices() {
+		return devices;
+	}
+
+	public void setDevices(List<DeviceRegex> devices) {
+		this.devices = devices;
+	}
+
+	public Set<String> getFilter() {
+		return filter;
+	}
+
+	public void setFilter(Set<String> filter) {
+		this.filter = filter;
+	}
+
+	
+	public List<Pair<String, String>> getPhonekeys() {
+		return phonekeys;
+	}
+	
+	public Map<String, String> getIphoneMap() {
+		return iphoneMap;
+	}
+
+	public static void main(String[] args) {
+		ConfManager conf = new ConfManager();
+		conf.load("conf/ua_device.conf");
+		System.out.println(conf.getDevices());
+		System.out.println(conf.containBlock("msg.push.51y5.net", "Dalvik/1.6.0 (Linux; U; Android 4.4.4; NEXUS 5 Build/KTU84P)"));
+		System.out.println(conf.checkPhoneKey("loginaccount"));
+	}
+	
+}

@@ -1,0 +1,59 @@
+package dmpcommon;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Reducer;
+
+public class KVReducer extends Reducer<Text,Text,Text,Text> {
+	private String date;
+	private Text outkey = new Text();
+	private static final String OUT_SPLIT = ",";
+
+	@Override
+	protected void setup(Reducer<Text, Text, Text, Text>.Context context) throws IOException, InterruptedException {
+		date = context.getConfiguration().get("date");
+	}
+	
+	public void reduce(Text key, Iterable<Text> values, Context context)throws IOException, InterruptedException        
+    {
+ 		Set<String> setKv = new HashSet<String>();
+ 		Map<Integer,Integer> mapFreq = new HashMap<Integer,Integer>();
+ 		int hour,min,index;
+ 		
+ 		String[] cells, units;
+ 		String[] vkey = key.toString().trim().split("\\|",-1);
+
+ 		for(Text t : values)//域名剔重
+ 		{
+ 			setKv.add(t.toString());
+ 		}
+ 		
+ 		for(String str : setKv)//构建频次位图
+ 		{
+ 			cells = str.split("\\|",-1);
+ 			units = cells[2].split("_",-1);
+ 			hour = Integer.parseInt(units[0]);
+ 			min = Integer.parseInt(units[1]);
+ 			index = hour*12+(int)(Math.ceil(min/5.0));
+ 			mapFreq.put(index, Integer.parseInt(cells[0]));
+ 		}
+ 		
+ 		StringBuffer sbfreq = new StringBuffer();
+ 		for (Map.Entry<Integer, Integer> entry : mapFreq.entrySet()) {
+            sbfreq.append(entry.getKey()).append(":").append(entry.getValue()).append("_");
+        }
+ 		StringBuffer sb = new StringBuffer();
+		sb.append(vkey[0]).append(OUT_SPLIT)
+			.append(vkey[1]).append(OUT_SPLIT)
+			.append(vkey[2]).append(OUT_SPLIT)
+			.append(sbfreq.substring(0, sbfreq.length() -1)).append(OUT_SPLIT)
+			.append(date).append(OUT_SPLIT);
+		outkey.set(sb.toString());
+		context.write(outkey, new Text(""));
+    } 
+}

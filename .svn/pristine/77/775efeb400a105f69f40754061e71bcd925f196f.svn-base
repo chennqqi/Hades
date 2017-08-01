@@ -1,0 +1,154 @@
+package com.aotain.project.gdtelecom.identifier.sz;
+
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Mapper;
+
+import com.aotain.project.gdtelecom.identifier.IdentifierMapper;
+import com.aotain.project.gdtelecom.identifier.enums.IdType;
+
+/**
+ * 深圳环境-用户标识解析post数据Map
+ * @author Liangsj
+ *
+ */
+public class IdentifierPMapper_Text extends IdentifierMapper<LongWritable, Text> {
+
+	@Override
+	protected void setup(Mapper<LongWritable, Text, Text, Text>.Context context)
+			throws IOException, InterruptedException {
+		super.setup(context);
+	}
+
+	@Override
+	public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+
+		String[] items = value.toString().split("\\|", -1);
+		if (items.length < 14) {
+			return;
+		}
+		try {
+			super.reset();
+			sUserName = items[0];
+			if (validateUser(sUserName)) {
+				return;
+			}
+
+			url = items[7].trim().toLowerCase();
+			cookie = items[10].trim().toLowerCase();
+			domain = items[6].trim();
+			ua = items[9];
+			ip=items[3];
+			port=items[5];
+			handleBase();
+
+			pack_contnt = items[13].trim().toLowerCase();
+			if (pack_contnt.contains("%")) {
+				pack_contnt = pack_contnt.replaceAll("%(?![0-9a-fA-F]{2})", "%25");
+				pack_contnt = java.net.URLDecoder.decode(pack_contnt, "utf-8");
+			}
+			pack_contnt = pack_contnt.replace("\"", "").toLowerCase();
+
+
+			String timestamp = items[11].trim();
+			long createtime = 10L;
+			try {
+				createtime = Long.parseLong(timestamp);
+			} catch (Exception e) {
+				;
+			}
+			SimpleDateFormat sdf = new SimpleDateFormat("HH");
+			long hour = Long.parseLong(sdf.format(createtime * 1000L));
+
+			int weight = 1;
+			if ((hour >= 21 && hour <= 23) || (hour >= 0 && hour <= 7)) {
+				weight = 2;
+			}
+			weight_device = weight;
+			
+			imei(weight, context);
+			device(context);
+			app(weight,context);
+			mail(weight, context);
+			mac_terminal(weight, context);
+			phone(weight, context);
+			imsi(weight, context);
+			qq(weight, context);
+			idfa(weight, context);
+			
+//			multiphone_test(weight, pack_contnt, context);
+//			multiphone_test(weight, url, context);
+//			multiphone_test(weight, cookie, context);
+			/*if ((hour >= 21 && hour <= 23) || (hour >= 0 && hour <= 7)) {
+				parseUA(2, context);
+				app(2,context);
+				identifierSub(context, 2, url, true, false, phonemap);
+				identifierSub(context, 3, cookie, false, false, phonemap);
+				identifierSub(context, 2, postcont, false, false, phonemap);
+			} else {
+				parseUA(1, context);
+				app(1,context);
+				identifierSub(context, 1, url, true, false, phonemap);
+				identifierSub(context, 2, cookie, false, false, phonemap);
+				identifierSub(context, 1, postcont, false, false, phonemap);
+			}*/
+
+		} catch (Exception e) {
+		}
+
+	}
+
+	/**
+	 * 测试：输出多个号码
+	 * @param weight
+	 * @param str
+	 * @param context
+	 */
+	private void multiphone_test(int weight,String str, Mapper<LongWritable, Text, Text, Text>.Context context) {
+		if (str == null)
+			return;
+		if(findPhCount(str,"(=|:)([1][0-9]{10})[;&,}\\s*]{1}",2) < 2) {
+			return;
+		}
+		String regex = "(\\w+=|\\w+:)([1][0-9]{10})[;&,}\\s*]{1}";
+		Pattern p = Pattern.compile(regex);
+		Matcher m = p.matcher(pack_contnt);
+		String result = "";
+		int i = 0;
+		while (m.find()) {
+			result = result + m.group(1) + m.group(2) + ";";
+			i++;
+			if(i >=2 ) {
+				break;
+			}
+		}
+		if(i>=2) {
+			try {
+				contextWrite(context, IdType.PHONE_TEST.getId(), result, 1);
+			} catch (Exception e) {
+				e.printStackTrace();
+			} 
+		}
+		
+	}
+
+	protected int findPhCount(String str, String regEx, int group) {
+		int resultValue = 0;
+		if ((str == null) || (regEx == null) || ((regEx != null) && ("".equals(regEx.trim()))))
+			return 0;
+
+		Pattern p = Pattern.compile(regEx);
+		Matcher m = p.matcher(str);
+
+		while ( m.find()) {
+			resultValue++;
+		}
+		return resultValue;
+	}
+}

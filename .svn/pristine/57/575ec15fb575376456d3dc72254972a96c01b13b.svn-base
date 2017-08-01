@@ -1,0 +1,42 @@
+package dmpcommon;
+
+import java.io.IOException; 
+import java.util.HashSet;
+import java.util.Set;
+
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Reducer;
+
+import com.aotain.project.gdtelecom.identifier.enums.IdType;
+
+public class KVReducer extends Reducer<Text,Text,Text,Text> {
+	private String date;
+
+	@Override
+	protected void setup(Reducer<Text, Text, Text, Text>.Context context) throws IOException, InterruptedException {
+		date = context.getConfiguration().get("date");
+	}
+	
+     public void reduce(Text key, Iterable<Text> values, Context context)throws IOException, InterruptedException        
+     {
+ 		Set<String> setKv = new HashSet<String>();
+ 		Text v = new Text();
+ 		int frequency = 0;
+ 		String[] cells;
+ 		String[] vkey = key.toString().trim().split("\\|",-1);
+
+ 		for(Text t : values)//”Ú√˚Ãﬁ÷ÿ
+ 		{
+ 			setKv.add(t.toString());
+ 		}
+ 		
+ 		for(String str : setKv)//”ãÀ„Ól¥Œ
+ 		{  
+ 			cells = str.split("\\|",-1);
+ 			frequency += Integer.parseInt(cells[0]);
+ 		}  
+
+ 		v.set(String.format("%s,%s,%s,%s,%s,",vkey[0],vkey[1],vkey[2],frequency,date));
+ 		context.write(v, new Text(""));
+     } 
+}

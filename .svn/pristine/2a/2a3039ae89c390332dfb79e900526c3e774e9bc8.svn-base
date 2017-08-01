@@ -1,0 +1,47 @@
+package com.aotain.project.tm.parse;
+
+import java.io.IOException;
+import java.util.Set;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Mapper;
+
+import com.aotain.project.tm.parse.conf.BrandConf;
+
+public class ParseDeviceDriver {
+	
+}
+
+class ParseMapper extends Mapper<Object, Text, Text, IntWritable>{
+	
+	private DeviceParser deviceParser;
+	private Text keyOut = new Text();
+	private IntWritable one = new IntWritable();
+	
+	@Override
+	protected void setup(Mapper<Object, Text, Text, IntWritable>.Context context)
+			throws IOException, InterruptedException {
+		Configuration conf = context.getConfiguration();
+		String brandConfPath = conf.get("BRAND_CONF");
+		BrandConf brandConf = new BrandConf();
+		brandConf.load(brandConfPath, conf);
+		deviceParser = new DeviceParser(brandConf);
+		super.setup(context);
+	}
+
+
+
+	public void map(Object key, Text value, Context context)
+			throws IOException, InterruptedException {
+		deviceParser.parse(value.toString());
+		if(deviceParser.isPriceLegal() && !deviceParser.isPhoneValid()){
+			Set<String> models = deviceParser.getModels();
+			for(String m : models){
+				keyOut.set(m + "|" + deviceParser.getName() + "|" + deviceParser.getBrand() + "|" + deviceParser.getType());
+				context.write(keyOut, one);
+			}
+		}
+	}
+}

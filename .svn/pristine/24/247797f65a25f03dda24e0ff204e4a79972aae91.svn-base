@@ -1,0 +1,85 @@
+package com.aotain.project.gdtelecom.identifier.sz;
+
+import java.io.IOException;
+import java.util.List;
+
+import org.apache.hadoop.hive.ql.io.orc.OrcStruct;
+import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
+import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Mapper;
+
+import com.aotain.project.gdtelecom.identifier.IdentifierMapper;
+
+/**
+ * 深圳环境-用户标识解析get数据Map
+ * @author Liangsj
+ *
+ */
+public class IdentifierGMapper_ORC extends IdentifierMapper<NullWritable, OrcStruct> {
+	final static String inputSchema = "struct<areaid:string,username:string,srcip:string,domain:string,"
+			+ "url:string,refer:string,opersys:string,opersysver:string,browser:string,"
+			+ "browserver:string,device:string,accesstime:bigint,cookie:string,keyword:string,"
+			+ "urlclassid:string,referdomain:string,referclassid:string,ua:string,"
+			+ "destinationip:string,sourceport:string,destinationport:string>";
+
+	private StructObjectInspector inputOI;
+
+	@Override
+	protected void setup(Mapper<NullWritable, OrcStruct, Text, Text>.Context context)
+			throws IOException, InterruptedException {
+		super.setup(context);
+		TypeInfo tfin = TypeInfoUtils.getTypeInfoFromTypeString(inputSchema);
+		inputOI = (StructObjectInspector) OrcStruct.createObjectInspector(tfin);
+	}
+
+	@Override
+	public void map(NullWritable key, OrcStruct value, Context context) throws IOException, InterruptedException {
+		try {
+			List<Object> ilst = inputOI.getStructFieldsDataAsList(value);
+			if (ilst.size() < 18) {
+				return;
+			}
+
+			sUserName = getCol(ilst, 1);
+			if (sUserName == null || validateUser(sUserName)) {
+				return;
+			}
+
+			url = getCol(ilst, 4);
+			cookie = getCol(ilst, 12);
+			domain = getCol(ilst, 3);
+			ua = getCol(ilst, 17);
+			ip = getCol(ilst, 18);
+			port = getCol(ilst, 20);
+
+			handleBase();
+
+			String timestamp = getCol(ilst, 11);
+			long hour = 10;
+			try {
+				if (timestamp != null) {
+					hour = Long.parseLong(timestamp.substring(8, 10));
+				}
+			} catch (Exception e) {
+			}
+
+			if ((hour >= 21 && hour <= 23) || (hour >= 0 && hour <= 7)) {
+				parseUA(2, context);
+				parseApp(2,context);
+				identifierSub(context, 2, url, true, false, map);
+				identifierSub(context, 3, cookie, false, false, map);
+			} else {
+				parseUA(1, context);
+				parseApp(1,context);
+				identifierSub(context, 1, url, true, false, map);
+				identifierSub(context, 2, cookie, false, false, map);
+			}
+		} catch (Exception e) {
+		}
+
+	}
+
+}

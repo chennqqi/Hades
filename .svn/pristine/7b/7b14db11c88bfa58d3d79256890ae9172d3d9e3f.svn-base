@@ -1,0 +1,6 @@
+FIELD_SPLIT=,
+KEY_VALUE_SPLIT=\\$
+COLUMNS=型号,名称,品牌,类型,价格,上市日期,主屏尺寸
+KEY_COLUMNS=名称
+NEW_SPLIT=#
+TYPE_VALUE=Device

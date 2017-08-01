@@ -1,0 +1,311 @@
+package com.aotain.project.gdtelecom;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Serializable;
+import java.net.URI;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
+
+import com.aotain.common.ObjectSerializer;
+
+/**
+ * 输入：ua解析uncheck数据
+ * 输出：uncheck与爬虫数据匹配后的 型号-名称 数据
+ * @author Administrator
+ *
+ */
+public class Device2Check extends Configured implements Tool{
+
+	@Override
+	public int run(String[] args) throws Exception {
+		// TODO Auto-generated method stub
+		if(args.length != 5)
+		{
+			System.out.print("args error!");
+			return -1;
+		}
+		
+    	Configuration conf = new Configuration(); 
+		
+		String inputPath = args[0];
+		String configPath = args[1];
+		String targetPath = args[2];
+		String date = args[3];
+		float threshold = 0.0f;
+		try{
+			threshold = Float.parseFloat(args[4]);
+		}catch(NumberFormatException e){
+			System.out.println("阈值须为数字");
+			return -1;
+		}	
+		
+		FileSystem fsSource = FileSystem.get(URI.create(inputPath), conf);
+		Path pathSource = new Path(inputPath);
+		if(!fsSource.exists(pathSource)) {
+			return 0;
+		}
+	
+		Map<String,Integer> mobile = new HashMap<String,Integer>();
+		Map<String,Integer> pad = new HashMap<String,Integer>();
+		Map<String,Integer> box = new HashMap<String,Integer>();
+		Map<String,Integer> tv = new HashMap<String,Integer>();
+		FileSystem fsUADevice = FileSystem.get(URI.create(configPath),conf); 
+		FSDataInputStream in = null;
+		try {
+			Path path = new Path(configPath);
+			if (fsUADevice.exists(path)) {
+				for (FileStatus file : fsUADevice.listStatus(path)) {
+					in = fsUADevice.open(file.getPath());
+					BufferedReader bis = new BufferedReader(
+							new InputStreamReader(in, "UTF8"));
+					String line = "";
+					while ((line = bis.readLine()) != null) {
+						String[] arr = line.split("\\|", -1);
+						if("MOBILE".equals(arr[0])){
+							mobile.put(arr[1]+"|"+arr[2]+"|"+arr[3], arr[2].length());
+						}else if("PAD".equals(arr[0])){
+							pad.put(arr[1]+"|"+arr[2]+"|"+arr[3], arr[2].length());
+						}else if("BOX".equals(arr[0])){
+							box.put(arr[1]+"|"+arr[2]+"|"+arr[3], arr[2].length());
+						}else if("TV".equals(arr[0])){
+							tv.put(arr[1]+"|"+arr[2]+"|"+arr[3], arr[2].length());
+						}
+					}
+				}
+			} else {
+				System.out.println("not exist file !");
+			}
+		} finally {
+			if (in != null)
+				IOUtils.closeStream(in);
+		}
+
+		FileSystem fsTarget = FileSystem.get(URI.create(targetPath),conf);
+        Path pathTarget = new Path(targetPath);
+        if(fsTarget.exists(pathTarget))
+        {
+      	  	fsTarget.delete(pathTarget, true);
+        }
+    
+		conf.set("mobile", ObjectSerializer.serialize((Serializable) mobile));
+		conf.set("pad", ObjectSerializer.serialize((Serializable) pad));
+		conf.set("box", ObjectSerializer.serialize((Serializable) box));
+		conf.set("tv", ObjectSerializer.serialize((Serializable) tv));
+		
+        conf.set("date", date);
+        conf.setFloat("threshold", threshold);
+        Job job = Job.getInstance(conf);
+        job.setJobName("Device2Check File[" + date + "]");                    
+        job.setJarByClass(getClass());
+        
+        job.setMapperClass(Device2CheckMapper.class);
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(Text.class);
+        job.setReducerClass(Device2CheckReducer.class);
+        job.setOutputKeyClass(Text.class);
+	    job.setOutputValueClass(Text.class); 
+        
+        FileInputFormat.addInputPath(job,new Path(inputPath));
+        FileOutputFormat.setOutputPath(job,new Path(targetPath));         
+
+        return job.waitForCompletion(true)?0:1;  
+	}
+	
+	public static void main(String[] args)throws Exception{
+        int exitcode = ToolRunner.run(new Device2Check(), args);
+        System.exit(exitcode);                  
+   }   
+}
+
+class Device2CheckMapper extends Mapper<LongWritable,Text,Text,Text>{
+	
+	private static Map<String,Integer> mobile = new HashMap<String,Integer>();
+	private static Map<String,Integer> pad = new HashMap<String,Integer>();
+	private static Map<String,Integer> box = new HashMap<String,Integer>();
+	private static Map<String,Integer> tv = new HashMap<String,Integer>();
+	
+	
+	 @Override
+	protected void setup(Context context) throws IOException,
+			InterruptedException {
+		String str = context.getConfiguration().get("mobile");
+		mobile  = ( HashMap<String,Integer>) ObjectSerializer
+		            .deserialize(str);
+		 str = context.getConfiguration().get("pad");
+	     pad  = ( HashMap<String,Integer>) ObjectSerializer
+			            .deserialize(str);
+	     str = context.getConfiguration().get("box");
+	     box  = ( HashMap<String,Integer>) ObjectSerializer
+			            .deserialize(str);
+	     str = context.getConfiguration().get("tv");
+	     tv  = ( HashMap<String,Integer>) ObjectSerializer
+			            .deserialize(str);
+	     
+	}	 
+	 
+	public void map(LongWritable key,Text value,Context context) 
+			throws IOException {
+		float threshold = context.getConfiguration().getFloat("threshold", 0.00f);
+		String regEx="[`~!@$%^&*()+=|{}':;',//[//].<>/?~！@￥%……&*（）——+|{}【】‘；：”“’。，、？ ]";
+		Map<Integer,Object> result=new HashMap<Integer,Object>();
+		
+		try {
+			//192.168.5.150,MOBILE,SAMSUNG#SM-TZ5RQM,1,20161111,
+				String[] items = value.toString().split(",", -1);
+				String[] brand_model = items[2].split("#");
+				String model = brand_model[1];
+				Pattern  p = Pattern.compile(regEx);      
+				Matcher m = p.matcher(model); 
+				model = m.replaceAll("").toUpperCase();
+				
+				model = model.replaceAll("COOLPAD", "").replaceAll("HUAWEI", "").replaceAll("LENOVO ", "").replaceAll("HONOR", "").trim();
+				
+				if(model == null || model.length() <= 1){
+					return;
+				}
+				
+				String type = items[1];
+				if("MOBILE".equals(type)){
+					result = SimilarRM(model,mobile);
+				}else if("PAD".equals(type)){
+					result = SimilarRM(model,pad);
+				}else if("BOX".equals(type)){
+					result = SimilarRM(model,box);
+				}else if("TV".equals(type)){
+					result = SimilarRM(model,tv);
+				}else if("UNKNOWN".equals(type)){
+					model = model.replaceAll("COOLPAD", "").replaceAll("HUAWEI", "").replaceAll("LENOVO ", "").replaceAll("HONOR", "").trim();
+					Map<Integer,Object> resultmobile =  SimilarRM(model, mobile);
+					Map<Integer,Object> resultpad =  SimilarRM(model, pad);
+					Map<Integer,Object> resultbox =  SimilarRM(model, box);
+					Map<Integer,Object> resulttv =  SimilarRM(model, tv);
+					float max = Math.max((float) resultmobile.get(1), (float) resultpad.get(1));
+					max = Math.max( max, (float) resultbox.get(1));
+					max = Math.max( max, (float) resulttv.get(1));
+					if( max == (float) resultmobile.get(1) ){
+						type = "MOBILE";
+						result = resultmobile;
+					}else if( max == (float) resultpad.get(1) ){
+						type = "PAD";
+						result = resultpad;
+					}else if( max == (float) resultbox.get(1) ){
+						type = "BOX";
+						result = resultbox;
+					}else if( max == (float) resulttv.get(1) ){
+						type = "TV";
+						result = resulttv;
+					}
+				}
+				DiffOut(value, context, threshold, brand_model[1], type, result);
+				
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+	}
+
+	private void DiffOut(Text value, Context context, float threshold, String model, String type,Map<Integer,Object> map) throws IOException,
+			InterruptedException {
+		Text v = new Text("");
+		String spider_bn = new String();
+		float max = (float) map.get(1);
+		Map<String,Integer> maxmap = (Map<String, Integer>) map.get(2);
+		if(max >=  threshold){
+		    int min = Integer.MAX_VALUE;
+			if(maxmap.size() == 1){
+				for (String mkey : maxmap.keySet()) {  
+					context.write(new Text(model+"@@@"+mkey.split("\\|")[0].trim()+"@@@"+mkey.split("\\|")[2].trim()+"@@@"+type), v);
+				}
+			}else {
+				for (Map.Entry<String, Integer> entry : maxmap.entrySet()) {
+					int temp = entry.getValue();
+					if(temp < min){
+						min = temp;
+						spider_bn =  entry.getKey();
+					}
+				}
+				context.write(new Text(model+"@@@"+spider_bn.split("\\|")[0].trim()+"@@@"+spider_bn.split("\\|")[2].trim()+"@@@"+type), v);
+			}
+		}else {
+			context.write(value, v);
+		}
+	}
+
+	private Map<Integer,Object> SimilarRM(String model, Map<String,Integer> map)  {
+		float max = 0.00f;
+		Map<Integer,Object> result=new HashMap<Integer,Object>();
+		Map<String,Integer> maxmap=new HashMap<String,Integer>();
+		String spider_model = new String();
+		for (Map.Entry<String, Integer> entry : map.entrySet()) {
+			String mapkey = entry.getKey();
+			spider_model = mapkey.split("\\|")[1];
+			float temp = SimilarFunction.Similar(model, spider_model);
+			if (temp > max) {
+				max = temp;
+				maxmap.clear();
+				maxmap.put(mapkey, entry.getValue());
+			}else if(temp == max){
+				maxmap.put(mapkey, entry.getValue());
+			}
+		}
+		
+		result.put(1, max);
+		result.put(2, maxmap);
+		
+		return result;
+
+	}
+	
+}
+
+class Device2CheckReducer  extends Reducer<Text,Text,Text,Text>{
+	private MultipleOutputs output;
+	
+	public void reduce(Text key, Iterable<Text> values, Context context)
+			throws IOException, InterruptedException     
+	{
+		String date = context.getConfiguration().get("date");
+		Text v = new Text("");
+		String keys = key.toString();
+		if(keys.contains("@@@") && keys.split("@@@").length == 4){
+			output.write(new Text(keys+"@@@"), v, "checked/"+date);
+		}else {
+			output.write(key, v, "uncheck/"+date);
+		}
+		
+	}
+	
+	@Override
+    protected void setup(Context context
+    ) throws IOException, InterruptedException {
+        output = new MultipleOutputs(context);
+    }
+	
+	public void cleanup(Context context) throws IOException, InterruptedException{
+		output.close();
+    }
+}
+
+

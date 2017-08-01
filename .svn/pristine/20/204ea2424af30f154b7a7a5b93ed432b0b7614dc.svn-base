@@ -1,0 +1,256 @@
+package com.aotain.project.gdtelecom.ua.util;
+
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.apache.hadoop.conf.Configuration;
+
+import com.aotain.common.CommonFunction;
+import com.aotain.project.gdtelecom.ua.ConfManager;
+import com.aotain.project.gdtelecom.ua.mapping.DeviceMapping;
+import com.aotain.project.gdtelecom.ua.pojo.Device;
+import com.aotain.project.gdtelecom.ua.pojo.DeviceProperties;
+import com.aotain.project.gdtelecom.ua.pojo.DeviceRegex;
+import com.aotain.project.gdtelecom.ua.pojo.DeviceType;
+
+public class UAUtil {
+
+	private ConfManager confManager;
+	
+	// 记录每个正则匹配得上的次数
+	private Map<String, Integer> matchRegex = new HashMap<String, Integer>();
+	private static final int DEVICE_MODEL_MAX_LENGTH = 30;
+	
+	public  UAUtil() {
+		confManager = new ConfManager();
+	}
+	
+	public void load(String hdfsFile, Configuration conf) {
+		confManager.load(hdfsFile, conf);
+		for(DeviceRegex device : confManager.getDevices()) {
+			matchRegex.put(device.getRegex(), 0);
+		}
+	}
+	
+	public void load(String confFile) {
+		confManager.load(confFile);
+		for(DeviceRegex device : confManager.getDevices()) {
+			matchRegex.put(device.getRegex(), 0);
+		}
+	}
+	
+	/**
+	 * 获取终端信息
+	 * @param UA
+	 * @return 获取不到返回null
+	 */
+	public Device getDevice(String UA) {
+		// 如果符合过滤条件的UA，不作处理，直接返回
+//		CalTimeUtil.start("filter");
+		if(filter(UA)) {
+			return null;
+		}
+//		CalTimeUtil.end("filter");
+		// 先用正则表达式方式获取终端型号、类型、品牌
+//		CalTimeUtil.start("regex");
+		Device device = getDeviceFromRegex(UA);
+//		CalTimeUtil.end("regex");
+		// 如果正则表达式方式无法获取
+//		CalTimeUtil.start("string");
+		if(null == device) {
+			String model = getDeviceModelString(UA);
+			if(null != model){
+				device = new Device();
+				if(UA.toUpperCase().contains("TABLET")) {
+					device.setType(DeviceType.PAD);
+					model = replace(model, "[\\s-_]*tablet", " ");
+					device.setModel(model);
+				} else {
+					device.setModel(model.trim());
+					device.setType(DeviceType.UNKNOWN);
+				}
+			}
+		}
+		// 型号中包含乱码或中文，返回null
+		if(null == device || CommonFunction.isContainChinese(device.getModel())) {
+			return null;
+		}
+//		CalTimeUtil.end("string");
+		return device;
+	}
+	
+	/**
+	 * 是否需要过滤掉
+	 * @param UA
+	 * @return 
+	 */
+	public boolean filter(String UA) {
+		if(confManager.getFilter().contains(UA.toUpperCase())) {
+			return true;
+		}
+		return false;
+	}
+	
+	public String replace(String str, String regex, String replacement) {
+		return Pattern.compile(regex, Pattern.CASE_INSENSITIVE).matcher(str).replaceAll(Matcher.quoteReplacement(replacement));
+	}
+	
+	/**
+	 * 正则表达式方式获取终端型号、类型、品牌
+	 * @param UA
+	 * @return
+	 */
+	public Device getDeviceFromRegex(String UA) {
+		if(null == UA || "".equals(UA.trim())){
+			return null;
+		}
+		Device device = null;
+		
+		List<DeviceRegex> devices = confManager.getDevices();
+		for(DeviceRegex t : devices) {
+			try{
+				Matcher pat = Pattern.compile(t.getRegex(), Pattern.CASE_INSENSITIVE).matcher(UA);
+				if(pat.find()) {
+					if(matchRegex.containsKey(t.getRegex())) {
+						matchRegex.put(t.getRegex(), matchRegex.get(t.getRegex()) + 1);
+					} 
+					device = new Device();
+					device.setRegex(t.getRegex());
+					int matchSize = pat.groupCount();
+					for(int i=0; i < t.getProps().size(); i++) {
+						DeviceProperties prop = t.getProps().get(i);
+						if(null == prop.getValue()) {
+							if(i <= matchSize - 1) {
+								device.setProperty(prop.getKey(), pat.group(i+1));
+							}
+						} else {
+							device.setProperty(prop.getKey(), prop.getValue());
+						}
+					}
+					break;
+				}
+			} catch (Exception e) {
+				System.out.println("正则表达式配置不对：" + t.getRegex());
+				e.printStackTrace();
+			}
+		}
+		// 获取到的型号若长度过长，则认为不对
+		if(null == device || null == device.getModel() || device.getModel().length() > DEVICE_MODEL_MAX_LENGTH) {
+			return null;
+		}
+		return device;
+	}
+	
+	/**
+	 * 获取终端型号
+	 * @param UA
+	 * @return
+	 */
+	public String getDeviceModelString(String UA) {
+		try {
+			/*if (UA.indexOf("iPhone") != -1) {
+				if (UA.indexOf("iPhone OS") != -1 && UA.indexOf("like") != -1 && UA.indexOf(";") != -1)
+					return UA.substring(UA.indexOf("iPhone OS"), UA.indexOf("like"));
+				return "iPhone";
+			}
+*/
+			if (UA.indexOf("Build") != -1) {
+				UA = UA.substring(0, UA.indexOf("Build"));
+				if (UA.indexOf(";") != -1)
+					return UA.substring(UA.lastIndexOf(";") + 1, UA.length());
+			}
+
+			/*if (UA.indexOf("MIUI") != -1) {
+				UA = UA.substring(0, UA.indexOf("MIUI") + 4);
+				if (UA.indexOf(";") != -1)
+					return UA.substring(UA.lastIndexOf(";") + 1, UA.length());
+			}*/
+			return null;
+		} catch (Exception ex) {
+			return null;
+		}
+	}
+	
+	public  void printRegexMap() {
+		Set<String> keySet = matchRegex.keySet();
+		for(String key : keySet) {
+			System.out.println(key + " ==== " + matchRegex.get(key));
+		}
+	}
+	
+	public static void main(String[] args) {
+		UAUtil uaUtil = new UAUtil();
+		uaUtil.load("conf/ua_device.conf");
+	/*	System.out.println(uaUtil.getDeviceFromRegex("bkwd_112_ios_10.1.1_iPhone 7 Plus;"));
+		System.out.println(uaUtil.getDeviceFromRegex("iOS8.1.1-Phone7032-iphone 4S-1009-0-WiFi"));
+		System.out.println(uaUtil.getDeviceFromRegex("(iPhone 6sp; CPU iPhone OS 9_1 like "));
+		System.out.println(uaUtil.getDeviceFromRegex("Chronicle/3.0.2 Rev/67638 (iPhone OS 8.4)"));
+		System.out.println(uaUtil.getDeviceFromRegex("iOS_9.3.1_xdj/5.1.5/8405_iPhone4S_AppStore"));
+		System.out.println(uaUtil.getDeviceFromRegex("54619png1.4.0 (iOS;10.1.1;Apple;iPhone)"));
+		System.out.println(uaUtil.getDeviceFromRegex("Youku;5.10.1;iPhone"));
+		System.out.println(uaUtil.getDeviceFromRegex("iPhone	9.3.1	autohome	5.9.5	iPhone"));
+		
+		System.out.println(uaUtil.getDeviceFromRegex("MBAAS_OSS_IOS_0.1.2 (iPhone OS;10.2;Apple;iPad)"));
+		System.out.println(uaUtil.getDeviceFromRegex("iphone~iPad~8.1.2"));
+		System.out.println(uaUtil.getDeviceFromRegex("Funshion/3.2.0.2 (ios/8.1.3; iphone; iPad4.1)"));
+		System.out.println(uaUtil.getDeviceFromRegex("Youku HD;4.8;iPhone OS;9.3.5;iPad4"));
+		System.out.println(uaUtil.getDeviceFromRegex("r=1011&net=&playmode=&tvid=1285636&vid=1797802&sid=6815223&vtype=m3u8&pn=iphone&duFile=http%3A%2F%2Fhotvrssohucom%2Fipad1797803_4694863956548_4908124m3u8%3Fvid%3ile Safari/537.36"));
+		*/
+		System.out.println(uaUtil.getDeviceFromRegex("Letv 5s build"));
+		System.out.println(uaUtil.getDeviceFromRegex("LG Nexus 4"));
+//		testFile();
+	}
+	
+	public static void testFile() {
+		UAUtil uaUtil = new UAUtil();
+		uaUtil.load("conf/ua_device.conf");
+		InputStream in = null;
+		BufferedReader br = null;
+		PrintWriter pw = null;
+		DeviceMapping mapping = new DeviceMapping();
+		mapping.load("conf/devicecheck");
+		try {
+			in = new FileInputStream("E:\\work\\dev\\6.省电信异网项目\\优化\\my.ua");
+			pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream("E:\\work\\dev\\6.省电信异网项目\\优化\\my.ua.parse"),"utf-8" ));
+			br = new BufferedReader(new InputStreamReader(in));
+			String line = null;
+			while((line=br.readLine())!=null) {
+				Device device = uaUtil.getDeviceFromRegex(line);
+				
+				if(device == null) {
+					System.out.println(line);
+				}else {
+					Device maped = mapping.mapping(device);
+					if(maped != null) {
+						pw.println(device + " ---->> "+ maped+ " ---->> "+ line);
+					} else {
+//						pw.println(device + " ---->> "+ line);
+					}
+				}
+			}
+			pw.close();
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally{
+			if(null != in) {
+				try {
+					in.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+}

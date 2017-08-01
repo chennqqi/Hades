@@ -1,0 +1,180 @@
+package com.aotain.project.gdtelecom.phone;
+
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Mapper;
+
+import com.aotain.common.CommonFunction;
+import com.aotain.common.ObjectSerializer;
+import com.aotain.project.gdtelecom.ua.mapping.DeviceParse;
+import com.aotain.project.gdtelecom.ua.pojo.Device;
+
+public class IdentifierTEXTMapper extends Mapper<LongWritable,Text,Text,Text>{
+	 
+	private static Map<String,String> map=new HashMap<String,String>();
+	protected DeviceParse deviceParse = new DeviceParse();
+
+	 private static boolean validateUser(String username){
+		boolean ret = false;
+		String aa = CommonFunction.findByRegex(username, "^([a-zA-Z0-9_\\-\\.]{1,50})@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))(com|cn|net|com.cn|org|gd)(\\]?)$", 0);
+		if(aa == null)
+		{
+			ret = true;
+		}
+		
+		return ret;
+	}
+	 
+	 public static String findByRegex(String str, String regEx, int group)
+	 	{
+	 		String resultValue = null;
+	 		if ((str == null) || (regEx == null) || ((regEx != null) && ("".equals(regEx.trim())))) 
+	 			return resultValue;
+	 		
+	 		
+	 		Pattern p = Pattern.compile(regEx);
+	 		Matcher m = p.matcher(str);
+
+	 		boolean result = m.find();
+	 		if (result)
+	 		{
+	 			resultValue = m.group(group);
+	 		}
+	 		return resultValue;
+	 	}
+
+	 private void IdentifierSub(Context context, String sUserName,
+				Map<String, String> notkmap,String rootDomain, int k, String tp,String ua)
+				throws IOException, InterruptedException {
+			String temp;
+			Text outv = new Text(k + "|" + rootDomain);
+
+			//phone
+			temp =  findByRegex(tp, "(=|:)([1][0-9]{10})[;&,}\\s*]{1}", 2);
+			if(temp != null)
+			{
+				String p3 = temp.substring(0, 3);
+				String p7 = temp.substring(0, 7);
+				if (map.get(p7) != null  || notkmap.get(p3) != null) {
+					if(null == ua || ua.trim().equals("") || CommonFunction.isMessyCode(ua)) {
+						return;
+					}
+					Device  device  = deviceParse.getDevice(ua);
+					if(device != null  && device.getName() != null){
+						context.write(new Text("5|"+sUserName+"|"+temp+","+device.getName()), outv);
+					}
+				}
+			}
+		}
+	 
+	 
+	 
+	 
+	 
+	@Override
+	protected void setup(Mapper<LongWritable, Text, Text, Text>.Context context)
+			throws IOException, InterruptedException {
+		// TODO Auto-generated method stub
+		  String str = context.getConfiguration().get("map");
+		  map  = ( HashMap<String,String>) ObjectSerializer
+		            .deserialize(str);
+		  deviceParse.init(context.getConfiguration());
+	}
+	 
+	 
+	 
+	public void map(LongWritable key,Text value,Context context) 
+			throws IOException, InterruptedException{
+		String sUserName = "";
+		Map<String,String> notkmap=new HashMap<String,String>();
+		
+		try
+      {
+			String notnk = context.getConfiguration().get("notnk");
+			String[] splits = notnk.split(",", -1);
+			for (String split : splits) {
+				if (split.trim().length() == 3) {
+					notkmap.put(split, split);
+				}
+			}
+
+			 
+			String[] items = value.toString().split("\\|", -1);
+			if (items.length == 14) {
+				String cell = items[0];
+				if (!validateUser(cell)) {
+					sUserName = cell;
+					
+					String url = items[7].trim().toLowerCase();
+					if (url.contains("%")){
+						url = url.replaceAll("%(?![0-9a-fA-F]{2})", "%25");  
+						url = java.net.URLDecoder.decode(url, "utf-8");
+					}
+					url = url.replace("\"", "").toLowerCase();
+					
+					String cookie = items[10].trim().toLowerCase();
+					if (cookie.contains("%")){
+						cookie = cookie.replaceAll("%(?![0-9a-fA-F]{2})", "%25");  
+						cookie = java.net.URLDecoder.decode(cookie, "utf-8");
+					}
+					cookie = cookie.replace("\"", "").toLowerCase();
+					
+					String postcont = items[13].trim().toLowerCase();
+					if (postcont.contains("%")){
+						postcont = postcont.replaceAll("%(?![0-9a-fA-F]{2})", "%25");  
+						postcont = java.net.URLDecoder.decode(postcont, "utf-8");
+					}
+					postcont = postcont.replace("\"", "").toLowerCase();
+					
+					String domain = items[6].trim();
+					String domains[] = domain.split("\\.");
+					int domainLength = domains.length;
+					String rootDomain = null;
+					if(domainLength > 2) {
+							 rootDomain = domain.substring(domain.indexOf(".")+1); 
+					}else{
+						     rootDomain = domain;
+					}
+					rootDomain = rootDomain != null ? rootDomain : "null.com";
+					
+					String timestamp = items[11].trim();
+					long createtime = 10L;
+					try {
+						createtime =Long.parseLong(timestamp) ;
+					}
+					catch (Exception e)  {;}
+					SimpleDateFormat sdf = new SimpleDateFormat("HH");
+					long hour =Long.parseLong(sdf.format(createtime*1000L));
+					if((hour >= 21 && hour <= 23) || (hour >= 0 && hour <= 7)){
+						 IdentifierSub(context, sUserName, notkmap,
+									rootDomain, 2,url,items[9]);
+						 IdentifierSub(context, sUserName, notkmap,
+									rootDomain, 3,cookie,items[9]);
+						 IdentifierSub(context, sUserName, notkmap,
+									rootDomain, 2,postcont,items[9]);
+					}else{
+						 IdentifierSub(context, sUserName, notkmap,
+									rootDomain, 1,url,items[9]);
+						 IdentifierSub(context, sUserName, notkmap,
+									rootDomain, 2,cookie,items[9]);
+						 IdentifierSub(context, sUserName, notkmap, 
+								   rootDomain, 1,postcont,items[9]);
+					}
+			
+				}
+			
+				}
+
+		}
+		catch (Exception e)  {;}
+		
+	}
+    
+}

@@ -1,0 +1,94 @@
+package com.aotain.project.gdtelecom.identifier.test;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.aotain.project.gdtelecom.identifier.enums.IdType;
+import com.aotain.project.gdtelecom.identifier.sz.IdentifierGMapper_ORC;
+
+public class Test {
+
+	private static StringBuffer bs = new StringBuffer();
+
+	public static void main(String[] args) {
+		System.out.println(IdType.nameof("3"));
+System.out.println("ipad".indexOf("ipad"));
+		String ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 10_0_1 like Mac OS X) AppleWebKit/602.1.50 (KHTML, like Gecko) Mobile/14A403 MicroMessenger/6.3.27 NetType/WIFI L";
+		long start = System.currentTimeMillis();
+		int i = 0;
+		while (i++ < 1000) {
+//			bs();
+			match(ua);
+		}
+		System.out.println(System.currentTimeMillis() - start);
+
+		System.out.println(new Test().parseTelTypeFromName("苹果iPhone 5C（联通3G）"));
+		
+		String url = "http://msg.71.am/v5/alt/act?&s2=home_top_menu&c1=8196&mod=cn_s&s3=E:020000&s4=3&position=1&r_eventid=15097eff0b99414496dc184628d1582e&r_area=cantor&r_bkt=cantor_common_v1&r_feedid=17868435848&r_tagset=all&aid=156833800&block=O:0281960010&bstp=3&c_batch=1&c_rtype=2&de=rzps";
+		IdentifierGMapper_ORC map = new IdentifierGMapper_ORC();
+		map.onephone(1,url, null);
+		System.out.println("asdfsadfsdafsadfdsafasdfsdafasdfsssssssssssssssssssssss".hashCode());
+		System.out.println(System.currentTimeMillis());
+	}
+
+	public static void formate() {
+		String s = String.format("%s,%s,%s,%s,%s,", "a", "a", "a", "a", "a");
+	}
+
+	public static void sb() {
+		StringBuffer sb = new StringBuffer();
+		sb.append("a").append("a").append("a").append("a").append("a").append("a").append("a").append("a").append("a")
+				.append("a");
+		String s = sb.toString();
+	}
+
+	public String parseTelTypeFromName(String name) {
+		// Moto RAZR V锋芒（MT887/移动版）
+		String regex1 = "（([-a-zA-Z\\d\\s\\+]*)\\/";// 取（到/部分
+		String regex2 = "([-a-zA-Z\\d\\s\\+]+)[（]";
+		String regex3 = "([-a-zA-Z\\d\\s\\+]+)";
+		String result = find(name, regex1);
+		if (!isModel(result)) {
+			result = find(name, regex2);
+		}
+		if (!isModel(result)) {
+			result = find(name, regex3);
+		}
+		if (!isModel(result)) {
+			result = "";
+		}
+		return result.toUpperCase();
+
+	}
+	
+	private static void contains(String str){
+		str.contains("iPhone");
+	}
+	
+	private static void match(String str) {
+		Matcher pat = Pattern.compile("(iphone.*?)([^\\s\\.a-zA-Z0-9]|\\t|OS|$)", Pattern.CASE_INSENSITIVE).matcher(str);
+		pat.find();
+		
+	}
+
+	private boolean isModel(String model) {
+		return model != null && !model.contains("GB") && !model.contains("4G") && !model.contains("3G")
+				&& !model.contains("2G");
+	}
+
+	private String find(String str, String regex) {
+		Pattern pat = Pattern.compile(regex);
+		Matcher mat = pat.matcher(str);
+		if (mat.find()) {
+			return mat.group(1);
+		}
+		return null;
+	}
+
+	public static void bs() {
+		bs.append("a").append("a").append("a").append("a").append("a").append("a").append("a").append("a").append("a")
+				.append("a");
+		String s = bs.toString();
+		bs.delete(0, bs.length() - 1);
+	}
+}

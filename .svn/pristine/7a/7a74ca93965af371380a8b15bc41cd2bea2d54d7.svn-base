@@ -1,0 +1,39 @@
+package com.aotain.project.gdtelecom.identifier.enums;
+
+public enum IdType {
+	QQACCOUNT("1", "QQAccount"), 
+	MAIL("2", "Mail"), 
+	IMEI("3", "IMEI"), 
+	MAC("4", "MAC"), 
+	IDFA("5", "IDFA"), 
+	PHONE("6", "Phone"), 
+	IMSI("7", "IMSI"), 
+	PHONE_TERMIAL("8", "Phone_Termial"),
+	TERMIAL("9", "Termial");
+
+	private String id;
+	private String name;
+
+	private IdType(String id, String name) {
+		this.id = id;
+		this.name = name;
+	}
+
+	public String getId() {
+		return id;
+	}
+
+	public String getName() {
+		return name;
+	}
+	
+	public static String nameof(String id) {
+		for(IdType idtype : values()){
+            if(idtype.id.equals(id)){
+                return idtype.getName();
+            }
+        }
+		return null;
+	}
+
+}

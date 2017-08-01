@@ -1,0 +1,186 @@
+package com.aotain.project.gdtelecom.identifier.adapter;
+
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.TreeMap;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+
+import com.aotain.common.CommonFunction;
+
+
+public class AppAdapter {
+
+	private Map<String, String> domainMap = new HashMap<String,String>();
+	private Map<String, String> ipMap = new HashMap<String,String>();
+	private Map<String, String> urlMap = new HashMap<String,String>();
+	private TreeMap<String, String> uaMap = null;
+	
+	public AppAdapter(){
+		uaMap = new TreeMap<String,String>(new Comparator<String>() {
+
+			@Override
+			public int compare(String o1, String o2) {
+				return o1.length() > o2.length() ? -1 : 1;
+			}
+		});
+	}
+	
+	public String getAppFromDomain(String domain){
+		return domainMap.get(domain);
+	}
+	
+	public String getAppFromIp(String ip,String port){
+		String result = ipMap.get(ip);
+		if(result == null) {
+			return ipMap.get(ip + ":" + port);
+		}
+		return result;
+	}
+	
+	public String getAppFromUrl(String url){
+		String key = CommonFunction.findByRegex(url, "http://.+?/(.*?)/.*", 1);
+		return urlMap.get(key);
+	}
+	
+	public String getAppFromUa(String ua){
+		if(CommonFunction.isNull(ua)) {
+			return null;
+		}
+		for(Map.Entry<String, String> kv :  uaMap.entrySet()) {
+			if(ua.contains(kv.getKey())) {
+				return kv.getValue();
+			}
+		}
+		return null;
+	}
+	
+	/**
+	 * 从本地加载配置
+	 * @param file check配置文件路径
+	 */
+	public void load(String file) {
+		InputStream in = null;
+		try {
+			in = new FileInputStream(file);
+			loadMapping(in);
+			System.out.println("数据加载完成,domainMap size:" + domainMap.size());
+			System.out.println("数据加载完成,urlMap size:" + urlMap.size());
+			System.out.println("数据加载完成,ipMap size:" + ipMap.size());
+			System.out.println("数据加载完成,uaMap size:" + uaMap.size());
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+			throw new RuntimeException("加载配置异常", e);
+		} finally{
+			close(in, null);
+		}
+	}
+	
+	/**
+	 * 从HDFS加载配置
+	 * @param hdfsMappingFile hdfs check配置文件路径
+	 * @param conf
+	 */
+	public void load(String hdfsPath, Configuration conf) {
+		InputStream checkin = null;
+		try {
+			System.out.println("加载路径:hdfs_path=" + hdfsPath);
+			FileSystem fs = FileSystem.get(conf);
+			Path  path = new Path(hdfsPath);
+			if(fs.exists(path)) {
+				for(FileStatus  filestatus : fs.listStatus(path)) {
+					System.out.println("加载数据:file=" + filestatus.getPath());
+					checkin = fs.open(filestatus.getPath());
+					loadMapping(checkin);
+					close(checkin, null);
+				}
+			}
+			System.out.println("数据加载完成,domainMap size:" + domainMap.size());
+			System.out.println("数据加载完成,urlMap size:" + urlMap.size());
+			System.out.println("数据加载完成,ipMap size:" + ipMap.size());
+			System.out.println("数据加载完成,uaMap size:" + uaMap.size());
+			if(domainMap.size() == 0 && urlMap.size() == 0 && ipMap.size() == 0 && uaMap.size() == 0) {
+				throw new RuntimeException("app配置数据为空，请检查,hdfs_path="+ hdfsPath);
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+			throw new RuntimeException("加载配置异常", e);
+		}finally{
+			close(checkin, null);
+		}
+	}
+	
+	
+	/**
+	 * 加载mapping配置
+	 * @param in
+	 */
+	public void loadMapping(InputStream in) {
+		BufferedReader br = null;
+		try {
+			br = new BufferedReader(new InputStreamReader(in, "utf-8"));
+			String line = null;
+			while((line=br.readLine())!=null) {
+				String[] arr = line.split(",");
+				if(arr.length < 3) {
+					continue;
+				}
+				String name = arr[0].trim();
+				String type = arr[1].trim();
+				String key = arr[2].trim();
+				if(type.equals("3")) {
+					domainMap.put(key, name);
+				} else if (type.equals("1")) {
+					String[] iparr = key.split(":");
+					if(iparr.length>=3) {
+						key  = iparr[0] + iparr[1];
+					}
+					ipMap.put(key, name);
+				} else if (type.equals("5")) {
+					urlMap.put(key, name);
+				} else if (type.equals("6")) {
+					uaMap.put(key, name);
+				} else{
+					System.out.println("不处理的类型数据：" + line);
+				}
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+			throw new RuntimeException(e);
+		} finally {
+			close(null, br);
+		}
+	}
+	
+	public void close(InputStream in, Reader reader) {
+		try {
+			if(in != null) {
+				in.close();
+			}
+			if(reader != null) {
+				reader.close();
+			}
+			} catch (IOException e) {
+		}
+	}
+	
+	public static void main(String[] args) {
+		AppAdapter app = new AppAdapter();
+		app.load("config/app");
+		System.out.println(app.getAppFromUa("MicroMessenger Client pp"));
+		System.out.println(app.getAppFromDomain("fetion.cdn20.com"));
+		System.out.println(app.getAppFromIp("36.250.76.178",""));
+		System.out.println(app.getAppFromUrl("http://54.21.1.54/moviets.tc.qq.com/542121"));
+	}
+}

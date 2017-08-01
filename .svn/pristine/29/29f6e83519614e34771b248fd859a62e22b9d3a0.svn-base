@@ -1,0 +1,52 @@
+package dmpcommon;
+
+import java.io.IOException; 
+import java.io.UnsupportedEncodingException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.apache.hadoop.hive.ql.io.orc.OrcStruct;
+import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
+import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Mapper;
+
+import com.aotain.common.CommonFunction;
+import com.aotain.common.ObjectSerializer;
+
+import dmpcommon.KVConfig.KvItem;
+
+public class KVOrcMapper extends KVMapper<NullWritable,OrcStruct>{
+	  
+	final static String inputSchema = "";
+	static StructObjectInspector inputOI;
+
+		public void setup(Context context) throws IOException,
+				InterruptedException {
+			super.setup(context);
+			TypeInfo tfin = TypeInfoUtils
+					.getTypeInfoFromTypeString(inputSchema);
+			inputOI = (StructObjectInspector) OrcStruct
+					.createObjectInspector(tfin);
+			super.setup(context);
+		}
+		
+	@Override
+      public void map(NullWritable key, OrcStruct value, Context context) throws IOException, InterruptedException{                         
+		  	
+			List<Object> ilst = inputOI.getStructFieldsDataAsList(value);
+			for(int i = 0; i < ilst.size(); i++)
+			{
+				vret += ilst.get(i) + fieldsplit;
+			}
+			super.handle(context);
+	  }
+}

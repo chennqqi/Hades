@@ -1,0 +1,46 @@
+package com.aotain.project.gdtelecom.identifier.sz;
+
+import java.io.IOException;
+
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Mapper;
+
+import com.aotain.project.gdtelecom.identifier.IdentifierMapper;
+
+public class IdentifierPMapper_Text extends IdentifierMapper<LongWritable, Text> {
+
+	@Override
+	protected void setup(Mapper<LongWritable, Text, Text, Text>.Context context)
+			throws IOException, InterruptedException {
+		super.setup(context);
+	}
+
+	@Override
+	public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+
+		String[] items = value.toString().split("\\|", -1);
+		if (items.length < 14) {
+			return;
+		}
+		try {
+			sUserName = items[0];
+			if (validateUser(sUserName)) {
+				return;
+			}
+
+			url = items[7];
+			cookie = items[10];
+			pack_contnt = items[13];
+			domain = items[6];
+			timestamp = items[11];
+			ua = items[9];
+
+			supermap(key, value, context);
+		} catch (Exception e) {
+			;
+		}
+
+	}
+
+}

@@ -1,0 +1,52 @@
+package com.aotain.project.gdtelecom.ua.mapping;
+
+import org.apache.hadoop.conf.Configuration;
+
+import com.aotain.project.gdtelecom.ua.pojo.Device;
+import com.aotain.project.gdtelecom.ua.pojo.DeviceType;
+
+public class DeviceParse {
+
+	private UAParse uaParse;
+	private DeviceMapping mapping;
+	
+	/**
+	 * 初始化配置信息
+	 * @param conf
+	 */
+	public void init(Configuration conf){
+		uaParse = new UAParse();
+		uaParse.load(conf.get("CONFIG_FILE"), conf);
+		mapping = new DeviceMapping();
+		mapping.load(conf.get("CHECK_CONF"),conf);
+	}
+	
+	/**
+	 * 从UA取获取Device，并从check表中匹配出 名称和品牌，注：使用前必须先初始化init
+	 * @param ua
+	 * @return 若ua中获取不到，则device==null,
+	 * 			若从ua获取到device，但check表中无法匹配出名称，则device.getName()==null
+	 */
+	public Device getDevice(String ua){
+		// 从终端获取终端信息（类型、型号、品牌）
+		Device device = uaParse.getDevice(ua);
+		if(device != null && null != device.getModel()) {
+			// 从check表中匹配出相应的名称
+			Device mapped =  mapping.mapping(device);
+			if(mapped != null) {
+				device.setName(mapped.getName());
+				device.setVendor(mapped.getVendor());
+			} else {
+				device.setName("");
+				device.setVendor("");
+			}
+		} else {
+			device = new Device("","",DeviceType.UNKNOWN);
+		}
+		return device;
+	}
+	
+	public static void main(String[] args) {
+	}
+	
+}

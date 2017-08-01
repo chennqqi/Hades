@@ -1,0 +1,152 @@
+package com.aotain.project.tm.parse.pojo;
+
+import com.aotain.project.tm.parse.conf.BrandConf;
+import com.aotain.project.tm.parse.utils.StringUtil;
+
+public class ModelHandle {
+	private BrandConf brandConf;
+	private String value;
+	
+	private static final String MODEL_REGES =  "[（\\(]([-a-zA-Z\\d\\s\\+]*)\\/";// 取（到/部分 ，括号里的型号
+	private static final String REMOVE_BRACKETS_REGES =  "(.*)[（\\(].*";// 去括号
+	
+	public ModelHandle(){}
+	
+	public ModelHandle(BrandConf brandConf, String value){
+		this.brandConf = brandConf;
+		this.value = value;
+	}
+	
+	public ModelHandle(String value){
+		this.value = value;
+	}
+	
+	/**
+	 * 去空格
+	 * @return
+	 */
+	public ModelHandle removeSpace(){
+		String newValue = StringUtil.rmSpace(value);
+		return new ModelHandle(brandConf, newValue);
+	}
+	
+	/**
+	 * 去括号及其内容
+	 * @return
+	 */
+	public ModelHandle removeBracket(){
+		String newValue = StringUtil.findByRegex(value, REMOVE_BRACKETS_REGES, 1);
+		if(newValue == null){
+			newValue = value;
+		}
+//		System.out.println("去括号：" + newValue);
+		return new ModelHandle(brandConf, newValue);
+	}
+	
+	/**
+	 * 去中文
+	 * @return
+	 */
+	public ModelHandle removeChinese(){
+		if(StringUtil.isNull(value)){
+			return this;
+		}
+		String newValue = StringUtil.rmChinese(value).trim();
+//		System.out.println("去中文：" +newValue);
+		return new ModelHandle(brandConf, newValue);
+	}
+	
+	/**
+	 * 去品牌关键字
+	 * @param brand
+	 * @return
+	 */
+	public ModelHandle removeBrandKey(String brand){
+		if(StringUtil.isNull(value)){
+			return this;
+		}
+		String newValue = brandConf.rmKey(value, brand);
+//		System.out.println("去品牌关键字：" +newValue);
+		return new ModelHandle(brandConf, newValue);
+	}
+	
+	/**
+	 * 替换中文品牌为英文品牌,中文key为英文key,且去除其它中文
+	 * @return
+	 */
+	public ModelHandle replaceChinese(String brand){
+		if(StringUtil.isNull(value)){
+			return this;
+		}
+		String newValue = StringUtil.rmChinese(brandConf.replaceCkey2EKey(brandConf.replaceCname2Ename(value), brand));
+//		System.out.println("替换中文品牌和key为英文：" +newValue);
+		return new ModelHandle(brandConf, newValue);
+	}
+	
+	/**
+	 * 替换英文Key为英文品牌
+	 * @return
+	 */
+	public ModelHandle replaceKeyToBrand(){
+		if(StringUtil.isNull(value)){
+			return this;
+		}
+		String newValue = brandConf.replaceEkey2EName(value);
+		return new ModelHandle(brandConf, newValue);
+	}
+	
+	/**
+	 * 去品牌
+	 * @param brand
+	 * @return
+	 */
+	public ModelHandle removeBrand(){
+		if(StringUtil.isNull(value)){
+			return this;
+		}
+		String newValue = brandConf.rmBrand(value);
+//		System.out.println("去品牌：" +newValue);
+		return new ModelHandle(brandConf, newValue);
+	}
+
+	/**
+	 * 取括号里的型号
+	 * 如 三星GALAXY A8(A8000/全网通)
+	 * @return 如 三星GALAXY A8(A8000/全网通)，返回A8000
+	 */
+	public ModelHandle BracketModel(){
+		if(StringUtil.isNull(value)){
+			return this;
+		}
+		String newValue = StringUtil.findByRegex(value, MODEL_REGES, 1);
+		if(isModel(newValue)){
+//			System.out.println("括号里的型号：" +newValue);
+			return new ModelHandle(brandConf, newValue);
+		}
+		return new ModelHandle(brandConf, null);
+	}
+	
+	
+	
+	private boolean isModel(String model) {
+		return model != null && !model.contains("GB") && !model.contains("4G") && !model.contains("3G") && !model.contains("2G");
+	}
+	
+	public BrandConf getBrandConf() {
+		return brandConf;
+	}
+
+	public void setBrandConf(BrandConf brandConf) {
+		this.brandConf = brandConf;
+	}
+
+	public String getValue() {
+		return value;
+	}
+
+	public void setValue(String value) {
+		this.value = value;
+	}
+	
+	
+}

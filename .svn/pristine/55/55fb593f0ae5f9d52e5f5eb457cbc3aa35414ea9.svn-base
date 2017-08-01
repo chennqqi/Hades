@@ -1,0 +1,74 @@
+package com.aotain.project.gdtelecom.identifier.sz;
+
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Mapper;
+
+import com.aotain.project.gdtelecom.identifier.IdentifierMapper;
+
+public class IdentifierPMapper_Text extends IdentifierMapper<LongWritable, Text> {
+
+	@Override
+	protected void setup(Mapper<LongWritable, Text, Text, Text>.Context context)
+			throws IOException, InterruptedException {
+		super.setup(context);
+	}
+
+	@Override
+	public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+
+		String[] items = value.toString().split("\\|", -1);
+		if (items.length < 14) {
+			return;
+		}
+		try {
+
+			sUserName = items[0];
+			if (validateUser(sUserName)) {
+				return;
+			}
+
+			url = items[7].trim().toLowerCase();
+			cookie = items[10].trim().toLowerCase();
+			domain = items[6].trim();
+			ua = items[9];
+			handleBase();
+
+			String postcont = items[13].trim().toLowerCase();
+			if (postcont.contains("%")) {
+				postcont = postcont.replaceAll("%(?![0-9a-fA-F]{2})", "%25");
+				postcont = java.net.URLDecoder.decode(postcont, "utf-8");
+			}
+			postcont = postcont.replace("\"", "").toLowerCase();
+
+
+			String timestamp = items[11].trim();
+			long createtime = 10L;
+			try {
+				createtime = Long.parseLong(timestamp);
+			} catch (Exception e) {
+				;
+			}
+			SimpleDateFormat sdf = new SimpleDateFormat("HH");
+			long hour = Long.parseLong(sdf.format(createtime * 1000L));
+
+			parseUA(context);
+			if ((hour >= 21 && hour <= 23) || (hour >= 0 && hour <= 7)) {
+				identifierSub(context, 2, url, true, false, map);
+				identifierSub(context, 3, cookie, false, false, map);
+				identifierSub(context, 2, postcont, false, false, map);
+			} else {
+				identifierSub(context, 1, url, true, false, map);
+				identifierSub(context, 2, cookie, false, false, map);
+				identifierSub(context, 1, postcont, false, false, map);
+			}
+
+		} catch (Exception e) {
+		}
+
+	}
+
+}

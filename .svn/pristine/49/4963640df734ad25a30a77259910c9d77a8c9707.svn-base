@@ -1,0 +1,105 @@
+package com.aotain.project.gdtelecom.ua.pojo;
+
+public class Device {
+	private String name;
+	private String vendor;
+	private String model;
+	private DeviceType type;
+
+
+	private String regex;
+
+	public Device() {
+	}
+
+	public Device(String name, String vendor, DeviceType type) {
+		super();
+		this.name = name;
+		this.vendor = vendor;
+		this.type = type;
+	}
+
+	public Device(String name, String model, String vendor, DeviceType type) {
+		super();
+		this.name = name;
+		this.vendor = vendor;
+		this.type = type;
+		this.model = model;
+	}
+	
+	public void setProperty(PropNameEnum name, String value) {
+		if (value == null || value.trim().equals("")) {
+			return;
+		}
+		value = value.trim();
+		switch (name) {
+		case VENDOR:
+			setVendor(value);
+			break;
+		case MODEL:
+			setModel(value);
+			break;
+		case TYPE:
+			setType(DeviceType.nameOf(value));
+			break;
+
+		}
+	}
+
+	public String getVendor() {
+		return vendor;
+	}
+
+	public void setVendor(String vendor) {
+		if (null != vendor) {
+			vendor = vendor.trim().toUpperCase();
+		}
+		this.vendor = vendor;
+	}
+
+	public String getModel() {
+		return model;
+	}
+
+	public void setModel(String model) {
+		if (null != model) {
+			model = model.replaceAll("BUILD", "").trim().toUpperCase();
+		}
+		this.model = model;
+	}
+
+	public DeviceType getType() {
+		return type;
+	}
+
+	public void setType(DeviceType type) {
+		this.type = type;
+	}
+
+	public String getRegex() {
+		return regex;
+	}
+
+	public void setRegex(String regex) {
+		this.regex = regex;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	
+	}
+
+
+
+	@Override
+	public String toString() {
+		return "Device [name=" + name + ", vendor=" + vendor + ", model=" + model + ", type=" + type + ", regex="
+				+ regex + "]";
+	}
+	
+
+}
