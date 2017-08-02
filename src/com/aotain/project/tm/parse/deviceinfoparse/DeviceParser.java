@@ -17,7 +17,11 @@ import com.aotain.project.tm.parse.common.pojo.DeviceType;
 import com.aotain.project.tm.parse.common.utils.StringUtil;
 
 /**
- * dim_deviceinfo解析，终端信息，即爬虫数据解析
+ * dim_deviceinfo解析，供匹配程序使用
+ * 从终端信息，即爬虫数据解析中，解析出该终端的所有型号
+ * 如P7-L09|华为Ascend P7（P7-L09/电信4G）
+ * 解析出 HUAWEIP7L09、P7-L09、ASCENDP7、HUAWEIP7-L09、HUAWEIP7、P7L09、HUAWEIASCENDP7
+ * 
  * @author Liangsj
  *
  */
@@ -86,10 +90,10 @@ public class DeviceParser {
 			}
 			
 			// 型号等于品牌的，无效
-			List<Brand> k = brandConf.getFromAtts(Brand.EKEY, m);// TODO待优化，先取得品牌
-			List<Brand> n = brandConf.getFromAtts(Brand.ENAME, m);
+			List<Brand> k = brandConf.getFromAtts(Brand.EKEY, m, brand);
+			List<Brand> n = brandConf.getFromAtts(Brand.ENAME, m, null);
 			if((k != null && k.size() > 0)|| (n != null && n.size() > 0)){
-				System.out.println("无效:" + m);
+				System.out.println("无效型号:" + m);
 				continue;
 			}
 			result.add(m);
@@ -121,7 +125,7 @@ public class DeviceParser {
 		ModelHandle bracketModel = m.bracketModel();
 		if(!StringUtil.isNull(bracketModel.getValue())){
 			result.add(bracketModel.getValue());
-			Brand b = brandConf.getFromOneAtt(Brand.CNAME, bracketModel.getBrand());
+			Brand b = brandConf.getFromOneAtt(Brand.CNAME, bracketModel.getBrand(), null);
 			if(b !=null){
 				result.add(b.getEname() + bracketModel.getValue());// 品牌+型号
 			}
@@ -299,13 +303,13 @@ public class DeviceParser {
 		String line2 ="P7-L09|华为Ascend P7（P7-L09/电信4G）|华为|MOBILE|1250|上市日期=2015年07月$手机类型=4G手机，3G手机，智能手机，拍照手机，平板手机$触摸屏类型=电容屏，多点触控$主屏尺寸=5.7英寸$主屏材质=Super AMOLED$主屏分辨率=1920x1080像素$屏幕像素密度=386ppi$窄边框=2.86mm$屏幕占比=74.05%$4G网络=移动TD-LTE，联通TD-LTE，联通FDD-LTE，电信TD-LTE，电信FDD-LTE$3G网络=移动3G（TD-SCDMA），联通3G（WCDMA），电信3G（CDMA2000），联通2G/移动2G（GSM）$支持频段=2G：CDMA 800 2G：GSM 850/900/1800/1900 3G：CDMA EVDO 800 3G：WCDMA 850/900/1900/2100 3G：TD-SCDMA B34/39 4G：TD-LTE 1900/2300/2600/2555-2575/2575-2635/2635-2655 4G：FDD-LTE 1750-1765/1765-1780/2100$SIM卡=双卡，Nano SIM卡$WLAN功能=双频WIFI，IEEE 802.11 a/b/g/n$导航=GPS导航，A-GPS技术，GLONASS导航，北斗导航$连接与共享=WALN热点，蓝牙4.1，NFC$操作系统=Android 5.1$用户界面=Touch Wiz2015$核心数=真八核$CPU型号=高通 骁龙615（MSM8939）$CPU频率=1.5GHz（大四核），1.0GHz（小四核）$GPU型号=高通 Adreno405$RAM容量=2GB$ROM容量=16GB/32GB$存储卡=MicroSD卡$扩展容量=128GB$电池类型=不可拆卸式电池$电池容量=3050mAh$摄像头类型=双摄像头（前后）$后置摄像头=1600万像素$前置摄像头=500万像素$闪光灯=LED补光灯$光圈=f/1.9$视频拍摄=1080p（1920×1080，30帧/秒）视频录制$拍照功能=感光度、白平衡、曝光，自动对焦，数码变焦广角自拍，美颜$造型设计=直板$机身颜色=魔幻金，雪域白，精灵黑$手机尺寸=158x76.8x5.9mm$手机重量=151g$机身材质=金属机身$操作类型=物理按键$感应器类型=重力感应器，光线传感器，距离传感器，指纹识别$指纹识别设计=前置指纹识别$机身接口=3.5mm耳机接口，Micro USB v2.0数据接口$音频支持=支持MIDI/MP3/AAC等格式$视频支持=支持MP4/3GP/AVC/AVI/MPEG-4等格式$图片支持=支持JPEG/PNG/GIF/BMP等格式$常用功能=秒表，计算器，电子词典，备忘录，日程表，记事本$商务功能=骚扰拦截，病毒查杀，权限管理，流量监控$保修政策=全国联保，享受三包服务$质保时间=1年$质保备注=主机1年，充电器1年，有线耳机3个月$客服电话=400-810-5858$电话备注=周一至周五：8:00-20:00；周六至周日：8:00-17:00（在线服务）$详细内容=自购机日起（以购机发票为准），如因质量问题或故障，凭厂商维修中心或特约维修点的质量检测证明，享受7日内退货，15日内换货，15日以上在质保期内享受免费保修等三包服务！注：单独购买手机配件产品的用户，请完好保存配件外包装以及发票原件，如无法提供上述凭证的，将无法进行正常的配件保修或更换。进入官网&gt;&gt;";
 		String line3 = "电信版夺目3D|HTC X515d 夺目3D（电信版）|HTC|MOBILE|华为|MOBILE|2820|上市日期=2016年04月$手";
 		String line4 = "CUBE U23GT 寒冰(16G), 酷比魔方 U23GT 寒冰(16G)|酷比魔方U23GT寒冰 16G|酷比魔方|PAD|2万|上市日期=2015年12月$手机类型=4G手机，3G手机，智能手机，音乐手机，拍照手机，快充手机$触摸屏类型=电容屏，多点触控$主屏尺寸=5.2英寸$主屏材质=Super AMOLED$主屏分辨率=1920x1080像素$屏幕像素密度=424ppi$窄边框=4.5mm$屏幕占比=68.33%$其他屏幕参数=2.5D弧面屏$4G网络=移动TD-LTE，联通TD-LTE，联通FDD-LTE$3G网络=移动3G（TD-SCDMA），联通3G（WCDMA），联通2G/移动2G（GSM）$支持频段=2G：GSM 850/900/1800/1900 3G：WCDMA 850/900/1900/2100 3G：TD-SCDMA 1880/2010 4G：TD-LTE B38/39/40/41 4G：FDD-LTE B1/3$SIM卡=双卡，Micro SIM卡/Nano SIM卡$WLAN功能=单频WIFI，IEEE 802.11 b/g/n$导航=GPS导航$连接与共享=WLAN热点，蓝牙4.0，OTG$操作系统=Android 5.1$用户界面=Funtouch OS 2.5$核心数=真八核$CPU频率=1.7GHz$GPU型号=Mali-T760$RAM容量=4GB$ROM容量=32GB$存储卡=MicroSD卡$扩展容量=128GB$电池类型=不可拆卸式电池$电池容量=2400mAh$其他硬件参数=双引擎闪充$摄像头类型=双摄像头（前后）$后置摄像头=1300万像素$前置摄像头=800万像素$传感器类型=CMOS$闪光灯=LED补光灯$光圈=f/2.2$摄像头特色=六镜式镜头$视频拍摄=1080p（1920×1080，30帧/秒）视频录制$拍照功能=PDAF相位对焦，急速追焦，防拖影，指纹拍照，自动对焦，慢镜头，快镜头，HDR，全景模式，夜景模式，超清画质，文档矫正，运动追踪，儿童模式，专业拍照，专业录像，趣味模式，美妆，性别识别$造型设计=直板$机身颜色=金色，银色，玫瑰金$手机尺寸=147.9x73.75x6.56mm$手机重量=135.5g$机身材质=金属机身$操作类型=触控按键$感应器类型=重力感应器，光线传感器，距离传感器，指纹识别，陀螺仪$指纹识别设计=后置指纹识别$机身接口=3.5mm耳机接口，Micro USB v2.0数据接口$音频支持=支持AAC/AAC+/AMR/MIDI/OGG/FLAC/WMA/WAV/APE/MP3等格式$视频支持=支持MP4/3GP/AVI等格式$图片支持=支持JPEG等格式$多媒体技术=HIFI音效（AK4375芯片）$常用功能=计算器，电子词典，电子书，闹钟，日历，录音机，情景模式，主题模式，收音机$商务功能=飞行模式，数据备份$服务特色=QQ客户端，新浪微博，微信，爱奇艺视频，腾讯视频，网易云音乐，高德地图，百度搜索，今日头条，电子书，美团，唯品会，大众点评，携程，支付宝，云服务$其他功能参数=分屏多任务$包装清单=主机&nbsp;x1 耳机&nbsp;x1 充电器&nbsp;x1 数据线&nbsp;x1 取卡针&nbsp;x1 透明后盖保护壳&nbsp;x1 保修卡&nbsp;x1 快速入门指南&nbsp;x1$保修政策=全国联保，享受三包服务$质保时间=1年$质保备注=主机1年，电池6个月，充电器1年，有线耳机3个月$客服电话=400-678-9688；800-830-5833$电话备注=全天24小时服务$详细内容=自购机日起（以购机发票为准），如因质量问题或故障，凭厂商维修中心或特约维修点的质量检测证明，享受7日内退货，30日内换货，30日以上在质保期内享受免费保修等三包服务！注：单独购买手机配件产品的用户，请完好保存配件外包装以及发票原件，如无法提供上述凭证的，将无法进行正常的配件保修或更换。进入官网&gt;&gt;";
-		parser.parse(line1);
+		parser.parse(line2);
 		Set<String> models = parser.getModels();
 		System.out.println("==========结果:");
 		for(String m : models){
 			System.out.println(m);
 		}
-		parseTest();
+//		parseTest();
 	}
 }
 

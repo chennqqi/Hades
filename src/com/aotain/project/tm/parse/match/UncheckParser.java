@@ -6,23 +6,18 @@ import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import com.aotain.project.tm.parse.common.conf.BrandConf;
 import com.aotain.project.tm.parse.common.conf.ModelMapping;
 import com.aotain.project.tm.parse.common.pojo.Brand;
-import com.aotain.project.tm.parse.common.pojo.Device;
-import com.aotain.project.tm.parse.common.pojo.DeviceType;
-import com.aotain.project.tm.parse.common.pojo.MatchEnum;
 import com.aotain.project.tm.parse.common.pojo.MatchResult;
 import com.aotain.project.tm.parse.common.utils.StringUtil;
 
 /**
  * unchecked数据解析器
  * 对unchecked数据进行解析，并匹配终端型号
+ * 输入：unchecked数据，型号-终端配置数据，品牌配置数据
  * @author Liangsj
  *
  */
@@ -103,132 +98,20 @@ public class UncheckParser {
 			// 品牌转为中文
 			pBrand = new Brand();
 			pBrand.setEname(brand);
-			Brand b = brandConf.getFromOneAtt(Brand.ENAME, brand);
+			Brand b = brandConf.getFromOneAtt(Brand.ENAME, brand, null);
 			System.out.println("品牌转为中文:" + b);
 			if(b != null){
 				pBrand.setCname(b.getCname());
 			}
 		}
-		String modelNoSpace = StringUtil.rmSpace(model);
 		
-		
-		if(null != pBrand){
-			String modelNoBrand = modelNoSpace.replace(pBrand.getEname(), "");
-			String modelNoKey = brandConf.rmEKey(modelNoSpace, pBrand.getCname());
-			System.out.println("去品牌:" + modelNoBrand);
-			System.out.println("去品牌关键字:" + modelNoKey);
-			
-			
-			// 取对应品牌的终端配置
-			List<Device> devices  = null;
-			if(null != type && !type.equals(DeviceType.UNKNOWN.getName())) {
-				devices = modelMapping.getDevice(type,pBrand.getCname());
-			} else {
-				devices = modelMapping.getDeviceFromBrand(pBrand.getCname());
-			}
-			if(null == devices){
-				return null;
-			}
-			
-			/** 全匹配 */
-			Device result = wholeMatchOne(modelNoSpace, devices);
-			if(result !=null){
-				System.out.println("全匹配:" + result);
-				return new MatchResult(result, MatchEnum.WHOLE);
-			}
-			/** model去品牌 */
-			if(!modelNoBrand.trim().equals(modelNoSpace.trim())){
-				result = match(modelNoBrand, devices);
-				if(result !=null) {
-					System.out.println("model去品牌匹配:" + result);
-					return new MatchResult(result, MatchEnum.WHOLE);
-				}
-			}
-			
-			/** model去品牌关键字 */
-			if(!modelNoKey.trim().equals(modelNoSpace.trim())){
-				result = match(modelNoKey, devices);
-				if(result !=null) {
-					System.out.println("model去品牌关键字匹配:" + result);
-					return new MatchResult(result, MatchEnum.WHOLE);
-				}
-			}
-			/** model取关键信息 */
-		}
-		
-		/**
-		 * 只根据型号匹配
-		 */
-		else if(modelNoSpace.length() >= 3){
-			MatchEnum m = MatchEnum.MODEL;
-			if(modelNoSpace.length() == 3){
-				m = MatchEnum.MODEL_MIN;
-			}
-			List<Device> ds = wholeMatchAll(modelNoSpace, modelMapping.getDeviceList());
-			System.out.println("ds:" + ds);
-			if(ds.size() == 1){
-				System.out.println("只匹配型号:" + ds.get(0));
-				return new MatchResult(ds.get(0), m);
-			} else if(ds.size() > 1){
-				Set<String> brands = new HashSet<String>();
-				for(Device d : ds){
-					brands.add(d.getBrand());
-				}
-				// 品牌只有一个，才返回
-				if(brands.size() ==1){
-					return new MatchResult(ds.get(0), m);
-				}
-			}
-		}
-		return null;
+		// 匹配
+		Matcher m  = new Matcher(pBrand, type,modelMapping, brandConf);
+		return m.doMatch(model);
 	} 
 	
-	public Device match(String model, List<Device> devices){
-		Device result = wholeMatchOne(model, devices);
-		if(result ==null){
-			String modelNoSpe = StringUtil.rmSpecialChar(model);
-			if(!modelNoSpe.trim().equals(model.trim())) {
-				System.out.println("去特殊字符:" + model);
-				result = wholeMatchOne(modelNoSpe, devices);
-			}
-		}
-		return result;
-	}
-	
 	/**
-	 * 根据型号匹配列表中终端，返回第一个匹配上(equals)的终端名称
-	 * @param model
-	 * @param devices
-	 * @return
-	 */
-	public Device wholeMatchOne(String model, List<Device> devices){
-		System.out.println("匹配"+ model);
-		if(null == devices || devices.size() == 0){
-			return null;
-		}
-		for(Device d : devices){
-			if(d.getModel().equals(model)){
-				return d;
-			}
-		}
-		return null;
-	}
-	
-	public List<Device> wholeMatchAll(String model, List<Device> devices){
-		if(null == devices || devices.size() == 0){
-			return null;
-		}
-		List<Device> result = new ArrayList<Device>();
-		for(Device d : devices){
-			if(d.getModel().equals(model)){
-				result.add(d);
-			}
-		}
-		return result;
-	}
-	
-	/**
-	 * 提取品牌(英文)
+	 * 提取品牌
 	 * @return
 	 */
 	private Brand parseBrand(String model){
@@ -318,7 +201,7 @@ public class UncheckParser {
 		m.load("E:\\work\\dev\\9.终端解析\\deviceInfoAnalysis\\data\\devicemodel.txt");
 		UncheckParser parser = new UncheckParser(m, conf);
 		BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream("E:\\work\\dev\\9.终端解析\\deviceInfoAnalysis\\data\\model_export_new.txt"), "UTF-8"));
-		PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream("E:\\work\\dev\\9.终端解析\\deviceInfoAnalysis\\data\\model_parse_min.txt"), "UTF-8"));
+		PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream("E:\\work\\dev\\9.终端解析\\deviceInfoAnalysis\\data\\model_parse_uncheck.txt"), "UTF-8"));
 		String line = null;
 		int count = 0;
 		int pcount = 0;
@@ -332,14 +215,15 @@ public class UncheckParser {
 				String out = "";
 				if(d == null){
 					out = parser.getType() + "|" + parser.getBrand() + "|"+ parser.getModel();
+					pw.println(out);
 				} else {
-					out = parser.getType() + "|" + parser.getBrand() + "|" + parser.getModel() + "     ====>    " + d.getDevice().getType() + "|" + d.getDevice().getBrand() + "|" + d.getDevice().getName();
+//					out = parser.getType() + "|" + parser.getBrand() + "|" + parser.getModel() + "     ====>    " + d.getDevice().getType() + "|" + d.getDevice().getBrand() + "|" + d.getDevice().getName();
 					System.out.println(out);
 					pcount++;
-					if(d.getMatchType() == MatchEnum.MODEL_MIN)
-						pw.println(out);
+					/*if(d.getMatchType() == MatchEnum.MODEL_MIN)*/
+//						pw.println(out);
 				}
-//				pw.println(out);
+				
 			}
 		}
 		pw.flush();

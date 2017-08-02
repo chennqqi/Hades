@@ -8,7 +8,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -77,7 +79,12 @@ public class BrandConf {
 					System.out.println("error:"+line);
 					continue;
 				}
-				brands.add(new Brand(arr[0].trim().toUpperCase(),arr[1].trim().toUpperCase(),arr[2].trim().toUpperCase(),arr[3].trim().toUpperCase()));
+				
+				String ckey = arr[0].trim().toUpperCase();
+				String ekey = arr[1].trim().toUpperCase();
+				String cname = arr[2].trim().toUpperCase();
+				String ename = arr[3].trim().toUpperCase();
+				brands.add(new Brand(ckey,ekey,cname,ename));
 			}
 			System.out.println("加载终端品牌配置完成：size=" + brands.size());
 		} catch (IOException e) {
@@ -273,14 +280,18 @@ public class BrandConf {
 	/**
 	 * 从配置数据中第findIdx个字段，值为findValue的Brand
 	 * @param findIndx Brand.CKEY Brand.EKEY Brand.CNAME Brand.ENAME
+	 * @param cname 品牌中文名，查找条件，或为空，则不判断
 	 * @return
 	 */
-	public List<Brand> getFromAtts(int findIdx, String findValue){
+	public List<Brand> getFromAtts(int findIdx, String findValue, String cname){
 		if(StringUtil.isNull(findValue)){
 			return null;
 		}
 		List<Brand> result = new ArrayList<Brand>();
 		for(Brand b : brands){
+			if(cname != null && !b.getCname().equals(cname)){
+				continue;
+			}
 			if(b.valueOf(findIdx).equals(findValue)){
 				result.add(b);
 			}
@@ -294,11 +305,14 @@ public class BrandConf {
 	 * @param findIndx Brand.CKEY Brand.EKEY Brand.CNAME Brand.ENAME
 	 * @return
 	 */
-	public Brand getFromOneAtt(int findIdx, String findValue){
+	public Brand getFromOneAtt(int findIdx, String findValue, String cname){
 		if(StringUtil.isNull(findValue)){
 			return null;
 		}
 		for(Brand b : brands){
+			if(cname != null && !b.getCname().equals(cname)){
+				continue;
+			}
 			if(b.valueOf(findIdx).equals(findValue)){
 				return b;
 			}
@@ -326,6 +340,6 @@ public class BrandConf {
 		conf.load("config/brand_ch.csv");
 		String str = "七彩虹 ab";
 		System.out.println(conf.replaceCkey2EKey(str, "七彩虹"));
-		System.out.println(conf.getFromOneAtt(Brand.CNAME, "东芝"));
+		System.out.println(conf.getFromOneAtt(Brand.EKEY, "GT", "三星"));
 	}
 }
